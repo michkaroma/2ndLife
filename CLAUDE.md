@@ -61,7 +61,7 @@ scripts/            seed.ts (données de démo), generate-icons.ts
 ## État d'avancement
 
 - [x] **Étape 1 — Setup** : SvelteKit + TS + Tailwind + SQLite (deps) + PWA. Build & check OK.
-- [ ] **Étape 2 — Couche données** : schéma + migrations + `db.ts` + `types.ts` + séries.
+- [x] **Étape 2 — Couche données** : schéma + migrations + `db.ts` + `types.ts` + `streaks.ts`. Check OK, schéma vérifié.
 - [ ] **Étape 3 — Boucle principale** : CRUD habitudes + écran « Aujourd'hui » + validation + auth.
 - [ ] **Étape 4 — Progression** : XP/niveaux/pièces/séries + tableau de bord + barre d'XP.
 - [ ] **Étape 5 — Quêtes + succès**.
