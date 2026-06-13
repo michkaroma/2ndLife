@@ -1,5 +1,5 @@
 import type { LayoutServerLoad } from './$types';
-import { listHabits, getHabitLog, getUserState, localDate } from '$lib/server/db';
+import { listHabits, getHabitLog, getUserState, getReward, localDate } from '$lib/server/db';
 import { computeHabitStreaks } from '$lib/server/streaks';
 import { levelInfoFromState } from '$lib/server/progression';
 import { ensureQuests, recomputeQuestProgress } from '$lib/server/quests';
@@ -27,7 +27,7 @@ export const load: LayoutServerLoad = ({ locals }) => {
 			today: { date, habits: [], globalStreak: 0 },
 			quests: []
 		};
-		return { authed: false, ...sync };
+		return { authed: false, equippedCosmetic: null, ...sync };
 	}
 
 	const habits = listHabits();
@@ -44,11 +44,13 @@ export const load: LayoutServerLoad = ({ locals }) => {
 	ensureQuests(level.level, date);
 	const quests = recomputeQuestProgress(date);
 
+	const equippedCosmetic = user.equipped_cosmetic_id ? getReward(user.equipped_cosmetic_id) : null;
+
 	const sync: SyncStateResponse = {
 		userState: user,
 		level,
 		today: { date, habits: today, globalStreak },
 		quests
 	};
-	return { authed: true, ...sync };
+	return { authed: true, equippedCosmetic, ...sync };
 };

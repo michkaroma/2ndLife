@@ -5,6 +5,7 @@ import { redirect, error } from '@sveltejs/kit';
 import { SESSION_COOKIE, verifySession } from '$lib/server/auth';
 import { initDb } from '$lib/server/db';
 import { seedAchievementsCatalog } from '$lib/server/achievements';
+import { seedShop } from '$lib/server/shop';
 
 const PUBLIC_EXACT = new Set<string>([
 	'/login',
@@ -22,6 +23,7 @@ function isPublic(pathname: string): boolean {
 export const init: ServerInit = async () => {
 	initDb();
 	seedAchievementsCatalog();
+	seedShop();
 };
 
 export const handle: Handle = async ({ event, resolve }) => {

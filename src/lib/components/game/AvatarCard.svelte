@@ -11,7 +11,8 @@
 		coins,
 		prestige = 0,
 		name = 'Compagnon',
-		topStreak = 0
+		topStreak = 0,
+		accessory = undefined
 	}: {
 		level: number;
 		intoLevel: number;
@@ -20,6 +21,7 @@
 		prestige?: number;
 		name?: string;
 		topStreak?: number;
+		accessory?: string;
 	} = $props();
 
 	const appearance = $derived(avatarAppearance(level, topStreak, prestige));
@@ -42,6 +44,11 @@
 		<div class="absolute -left-1 -top-1 text-2xl" title={appearance.mood.label}>
 			{appearance.mood.overlayEmoji}
 		</div>
+		{#if accessory}
+			<div class="absolute -bottom-1 -left-1 grid h-8 w-8 place-items-center rounded-pill bg-surface2 text-lg shadow-card" title="Cosmétique équipé">
+				{accessory}
+			</div>
+		{/if}
 	</div>
 
 	<div>

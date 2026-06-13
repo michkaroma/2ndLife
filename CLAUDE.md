@@ -65,7 +65,7 @@ scripts/            seed.ts (données de démo), generate-icons.ts
 - [x] **Étape 3 — Boucle principale** : CRUD habitudes + écran « Aujourd'hui » + validation 1 tap + auth (cookie HMAC). Vérifié (login/CRUD/validation/idempotence, check + dev).
 - [x] **Étape 4 — Progression** : tableau de bord (AvatarCard évolutif, en-tête niveau/XP/pièces, BottomNav), tokens de design, overlay montée de niveau + toasts. Build & rendu vérifiés. NB : couleur `ink` (pas `text`, collision préfixe `text-`).
 - [x] **Étape 5 — Quêtes + succès** : génération déterministe (config/quests), progression recalculée par agrégats SQL (server/quests), succès (config+server/achievements) débloqués via logHabit, réclamation de quêtes, vitrine des succès dans /reglages. Vérifié.
-- [ ] **Étape 6 — Avatar + boutique**.
+- [x] **Étape 6 — Avatar + boutique** : avatar évolutif (étape 4) + cosmétique équipé en overlay ; boutique (18 cosmétiques + 6 récompenses réelles, seedShop si vide), achat/équipement/échange, ajout de récompense perso. Vérifié.
 - [ ] **Étape 7 — Module addictions** (boss, clean, argent, santé, SOS, journal).
 - [ ] **Étape 8 — Finition PWA** (offline, Web Push).
 - [ ] **Étape 9 — Finalisation** (README, déploiement, seed, revue).
