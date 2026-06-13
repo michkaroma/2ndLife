@@ -1,0 +1,40 @@
+{
+  "name": "habitquest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HabitQuest — application personnelle de gamification d'habitudes et de sevrage (PWA)",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node build/index.js",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "seed": "tsx scripts/seed.ts",
+    "icons": "tsx scripts/generate-icons.ts",
+    "vapid": "web-push generate-vapid-keys"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "^5.2.9",
+    "@sveltejs/kit": "^2.8.1",
+    "@sveltejs/vite-plugin-svelte": "^4.0.2",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.9.0",
+    "@types/web-push": "^3.6.4",
+    "@vite-pwa/sveltekit": "^0.6.7",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "sharp": "^0.33.5",
+    "svelte": "^5.2.7",
+    "svelte-check": "^4.1.0",
+    "tailwindcss": "^3.4.15",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.6.0",
+    "web-push": "^3.6.7"
+  }
+}

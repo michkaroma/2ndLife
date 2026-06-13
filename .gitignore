@@ -1,0 +1,25 @@
+node_modules
+
+# Sorties de build
+/build
+/.svelte-kit
+/package
+
+# Environnement
+.env
+.env.*
+!.env.example
+
+# Base de données SQLite (persistée hors git)
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.sqlite
+data/*.sqlite-*
+
+# Divers
+*.local
+.DS_Store
+Thumbs.db
+vite.config.ts.timestamp-*
+vite.config.js.timestamp-*
