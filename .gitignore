@@ -17,6 +17,9 @@ data/*.db-wal
 data/*.sqlite
 data/*.sqlite-*
 
+# Réglages locaux Claude Code
+.claude/settings.local.json
+
 # Divers
 *.local
 .DS_Store
