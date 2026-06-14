@@ -2,7 +2,7 @@
 	import { useRegisterSW } from 'virtual:pwa-register/svelte';
 
 	const { needRefresh, updateServiceWorker } = useRegisterSW({
-		onRegisteredSW(_url, reg) {
+		onRegisteredSW(_url: string, reg: ServiceWorkerRegistration | undefined) {
 			if (reg) setInterval(() => reg.update(), 60 * 60 * 1000);
 		}
 	});

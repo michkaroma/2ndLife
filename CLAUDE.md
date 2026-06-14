@@ -67,7 +67,7 @@ scripts/            seed.ts (données de démo), generate-icons.ts
 - [x] **Étape 5 — Quêtes + succès** : génération déterministe (config/quests), progression recalculée par agrégats SQL (server/quests), succès (config+server/achievements) débloqués via logHabit, réclamation de quêtes, vitrine des succès dans /reglages. Vérifié.
 - [x] **Étape 6 — Avatar + boutique** : avatar évolutif (étape 4) + cosmétique équipé en overlay ; boutique (18 cosmétiques + 6 récompenses réelles, seedShop si vide), achat/équipement/échange, ajout de récompense perso. Vérifié.
 - [x] **Étape 7 — Module addictions** : boss + barre HP (HP = jours cibles), compteur clean, argent économisé (compteur animé + équivalences), frise santé par type, SOS (respiration cohérence cardiaque + mini-jeu bulles + motivation), journal de déclencheurs + tendances SVG, rechute bienveillante (gel/reset, meilleure série préservée). Vérifié (rendu + logique rechute).
-- [ ] **Étape 8 — Finition PWA** (offline, Web Push).
+- [x] **Étape 8 — Finition PWA** : injectManifest (service-worker.ts custom : precache + offline + push + relais outbox), outbox IndexedDB + synchro à la reconnexion, Web Push (VAPID, env.ts/push.ts/reminder.ts), rappel quotidien node-cron + /api/cron/daily, icônes (generate-icons + sharp), bascule push dans /reglages. check 0 + build injectManifest OK.
 - [ ] **Étape 9 — Finalisation** (README, déploiement, seed, revue).
 
 ## Conventions
