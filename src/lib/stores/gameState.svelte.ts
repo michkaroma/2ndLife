@@ -33,7 +33,10 @@ const EMPTY_USER: UserStateRow = {
 	freezes: 0,
 	last_active: null,
 	last_freeze_grant: null,
-	equipped_cosmetic_id: null,
+	equipped_theme_id: null,
+	equipped_skin_id: null,
+	equipped_accessory_id: null,
+	equipped_frame_id: null,
 	created_at: ''
 };
 

@@ -39,7 +39,7 @@
 		coins={gameState.user.coins}
 		prestige={gameState.level.prestige}
 		topStreak={gameState.globalStreak}
-		accessory={data.equippedCosmetic?.icon ?? undefined}
+		accessory={data.equippedCosmetics.accessory}
 	/>
 
 	<QuestList quests={dailyQuests} {onclaim} title="Quêtes du jour" />

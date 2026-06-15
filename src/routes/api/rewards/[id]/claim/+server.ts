@@ -1,7 +1,10 @@
 import type { RequestHandler } from './$types';
-import { getReward, getUserState, claimReward } from '$lib/server/db';
+import { getReward, getUserState, claimReward, setEquippedCosmeticForSlot } from '$lib/server/db';
 import { levelFromXp } from '$lib/config/progression';
 import { ok, fail } from '$lib/server/respond';
+import type { CosmeticSlot } from '$lib/types';
+
+const VALID_SLOTS = new Set<string>(['theme', 'avatar_skin', 'accessory', 'badge_frame']);
 
 export const POST: RequestHandler = ({ params }) => {
 	const id = Number(params.id);
@@ -19,6 +22,11 @@ export const POST: RequestHandler = ({ params }) => {
 
 	const updated = claimReward(id, level);
 	if (!updated) return fail('CLAIM_FAILED', 'Achat impossible.', 409);
+
+	// Auto-équipe le cosmétique dans son emplacement
+	if (updated.kind === 'cosmetic' && updated.category && VALID_SLOTS.has(updated.category)) {
+		setEquippedCosmeticForSlot(id, updated.category as CosmeticSlot);
+	}
 
 	return ok({ reward: updated, coins: getUserState().coins });
 };

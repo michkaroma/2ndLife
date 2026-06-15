@@ -21,6 +21,7 @@ import type {
 	Reward,
 	RewardKind,
 	AddictionTarget,
+	DailyCheckin,
 	TriggerEntry,
 	PushSubscriptionRow,
 	OwnedCosmetic,
@@ -31,7 +32,8 @@ import type {
 	NewReward,
 	NewAddictionTarget,
 	NewTriggerEntry,
-	WebPushKeys
+	WebPushKeys,
+	CosmeticSlot
 } from '../types';
 
 // =========================================================================
@@ -56,11 +58,9 @@ export function getDb(): Database.Database {
 	return _db;
 }
 
-/** Server boot: open connection, run migrations, seed default settings. */
 export function initDb(): void {
 	getDb();
 	if (getSetting('reminder_hour') === null) setSetting('reminder_hour', 20);
-	// Achievements catalog + default rewards are seeded by their engines on boot.
 }
 
 export function closeDb(): void {
@@ -71,7 +71,7 @@ export function closeDb(): void {
 }
 
 // =========================================================================
-//  Date / period helpers (single source of truth for "today", server-local)
+//  Date / period helpers
 // =========================================================================
 export function localDate(d: Date = new Date()): string {
 	const y = d.getFullYear();
@@ -80,7 +80,6 @@ export function localDate(d: Date = new Date()): string {
 	return `${y}-${m}-${day}`;
 }
 
-/** Horodatage local 'YYYY-MM-DD HH:MM:SS' (cohérent avec localDate). */
 export function localDateTime(d: Date = new Date()): string {
 	const p = (n: number) => String(n).padStart(2, '0');
 	return `${localDate(d)} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
@@ -100,18 +99,16 @@ export function nextDate(date: string): string {
 	return localDate(dt);
 }
 
-/** Whole days between two 'YYYY-MM-DD' dates (b - a). */
 export function daysBetween(a: string, b: string): number {
 	const [ay, am, ad] = a.split('-').map(Number);
 	const [by, bm, bd] = b.split('-').map(Number);
 	return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
 }
 
-/** ISO week label 'YYYY-Www' (Thursday-anchored) for a local date. */
 export function isoWeek(date: string = localDate()): string {
 	const [y, m, d] = date.split('-').map(Number);
 	const dt = new Date(Date.UTC(y, m - 1, d));
-	const dayNum = (dt.getUTCDay() + 6) % 7; // Mon=0..Sun=6
+	const dayNum = (dt.getUTCDay() + 6) % 7;
 	dt.setUTCDate(dt.getUTCDate() - dayNum + 3);
 	const firstThursday = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4));
 	const week =
@@ -122,11 +119,11 @@ export function isoWeek(date: string = localDate()): string {
 				((firstThursday.getUTCDay() + 6) % 7)) /
 				7
 		);
-	return `${dt.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+	return `${dt.getUTCFullYear()}-W${String(week).padStart(2, '00')}`;
 }
 
 // =========================================================================
-//  Settings (key/value, JSON-encoded)
+//  Settings
 // =========================================================================
 export function getSetting<T = unknown>(key: string): T | null {
 	const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(key) as
@@ -181,7 +178,6 @@ export function consumeFreeze(): boolean {
 		.run();
 	return info.changes === 1;
 }
-/** Grant one weekly freeze (capped at FREEZES_MAX), idempotent per ISO week. */
 export function grantWeeklyFreezeIfDue(week: string): boolean {
 	const info = getDb()
 		.prepare(
@@ -195,11 +191,20 @@ export function grantWeeklyFreezeIfDue(week: string): boolean {
 export function setLastActive(date: string): void {
 	getDb().prepare('UPDATE user_state SET last_active = ? WHERE id = 1').run(date);
 }
-export function setEquippedCosmetic(rewardId: number | null): void {
-	getDb().prepare('UPDATE user_state SET equipped_cosmetic_id = ? WHERE id = 1').run(rewardId);
+
+const SLOT_TO_COLUMN: Record<CosmeticSlot, string> = {
+	theme:       'equipped_theme_id',
+	avatar_skin: 'equipped_skin_id',
+	accessory:   'equipped_accessory_id',
+	badge_frame: 'equipped_frame_id'
+};
+
+export function setEquippedCosmeticForSlot(rewardId: number | null, slot: CosmeticSlot): void {
+	const col = SLOT_TO_COLUMN[slot];
+	// col comes from a controlled map — safe to interpolate
+	getDb().prepare(`UPDATE user_state SET ${col} = ? WHERE id = 1`).run(rewardId);
 }
-/** Prestige: requires level >= PRESTIGE_LEVEL. Resets total_xp, prestige+1,
- *  logs a 'prestige' event. Coins/cosmetics/achievements preserved. */
+
 export function prestige(): number | null {
 	const db = getDb();
 	return db.transaction((): number | null => {
@@ -214,7 +219,7 @@ export function prestige(): number | null {
 }
 
 // =========================================================================
-//  Level events (celebration queue)
+//  Level events
 // =========================================================================
 export function logLevelEvent(
 	type: LevelEventType,
@@ -410,7 +415,6 @@ export function setQuestProgress(id: number, value: number): Quest | null {
 		.run(value, id);
 	return getQuest(id);
 }
-/** Mark complete (idempotent). Returns true only on the locked→complete transition. */
 export function completeQuest(id: number): boolean {
 	return (
 		getDb()
@@ -448,7 +452,6 @@ export function seedAchievements(
 			stmt.run({ description: null, icon: null, reward_coins: 0, ...r });
 	})(rows);
 }
-/** Stamp unlocked_at if null. Returns the row IFF it transitioned to unlocked. */
 export function unlockAchievement(key: string): Achievement | null {
 	const info = getDb()
 		.prepare(`UPDATE achievements SET unlocked_at = datetime('now') WHERE key = ? AND unlocked_at IS NULL`)
@@ -462,13 +465,15 @@ export function unlockAchievement(key: string): Achievement | null {
 export function createReward(input: NewReward): Reward {
 	const info = getDb()
 		.prepare(
-			`INSERT INTO rewards (name, cost, kind, icon, description, min_level, repeatable)
-       VALUES (@name, @cost, @kind, @icon, @description, @min_level, @repeatable)`
+			`INSERT INTO rewards (name, cost, kind, category, asset_id, icon, description, min_level, repeatable)
+       VALUES (@name, @cost, @kind, @category, @asset_id, @icon, @description, @min_level, @repeatable)`
 		)
 		.run({
 			name: input.name,
 			cost: input.cost,
 			kind: input.kind,
+			category: input.category ?? null,
+			asset_id: input.asset_id ?? null,
 			icon: input.icon ?? null,
 			description: input.description ?? null,
 			min_level: input.min_level ?? 1,
@@ -486,6 +491,8 @@ export function updateReward(id: number, patch: Partial<NewReward>): Reward | nu
 		name: patch.name ?? r.name,
 		cost: patch.cost ?? r.cost,
 		kind: patch.kind ?? r.kind,
+		category: patch.category !== undefined ? patch.category : r.category,
+		asset_id: patch.asset_id !== undefined ? patch.asset_id : r.asset_id,
 		icon: patch.icon !== undefined ? patch.icon : r.icon,
 		description: patch.description !== undefined ? patch.description : r.description,
 		min_level: patch.min_level ?? r.min_level,
@@ -494,8 +501,8 @@ export function updateReward(id: number, patch: Partial<NewReward>): Reward | nu
 	};
 	getDb()
 		.prepare(
-			`UPDATE rewards SET name=@name, cost=@cost, kind=@kind, icon=@icon, description=@description,
-         min_level=@min_level, repeatable=@repeatable WHERE id=@id`
+			`UPDATE rewards SET name=@name, cost=@cost, kind=@kind, category=@category, asset_id=@asset_id,
+         icon=@icon, description=@description, min_level=@min_level, repeatable=@repeatable WHERE id=@id`
 		)
 		.run(merged);
 	return getReward(id);
@@ -510,8 +517,6 @@ export function listRewards(opts?: { kind?: RewardKind }): Reward[] {
 				.all(opts.kind) as Reward[])
 		: (getDb().prepare('SELECT * FROM rewards ORDER BY min_level ASC, cost ASC').all() as Reward[]);
 }
-/** Claim: checks min_level + affordability, spends coins, stamps claimed_at
- *  (non-repeatable) and records cosmetic ownership. Atomic. */
 export function claimReward(id: number, currentLevel: number): Reward | null {
 	const db = getDb();
 	return db.transaction((): Reward | null => {
@@ -536,8 +541,12 @@ export function listOwnedCosmetics(): OwnedCosmetic[] {
 export function createAddictionTarget(input: NewAddictionTarget): AddictionTarget {
 	const info = getDb()
 		.prepare(
-			`INSERT INTO addiction_targets (name, clean_since, money_per_day, target_streak_days, kind, icon)
-       VALUES (@name, @clean_since, @money_per_day, @target_streak_days, @kind, @icon)`
+			`INSERT INTO addiction_targets
+         (name, clean_since, money_per_day, target_streak_days, kind, icon,
+          mode, daily_limit_minutes, no_use_before, baseline_minutes_per_day, track_time, track_money)
+       VALUES
+         (@name, @clean_since, @money_per_day, @target_streak_days, @kind, @icon,
+          @mode, @daily_limit_minutes, @no_use_before, @baseline_minutes_per_day, @track_time, @track_money)`
 		)
 		.run({
 			name: input.name,
@@ -545,7 +554,13 @@ export function createAddictionTarget(input: NewAddictionTarget): AddictionTarge
 			money_per_day: input.money_per_day ?? 0,
 			target_streak_days: input.target_streak_days ?? 90,
 			kind: input.kind ?? null,
-			icon: input.icon ?? null
+			icon: input.icon ?? null,
+			mode: input.mode ?? 'abstinence',
+			daily_limit_minutes: input.daily_limit_minutes ?? null,
+			no_use_before: input.no_use_before ?? null,
+			baseline_minutes_per_day: input.baseline_minutes_per_day ?? 0,
+			track_time: input.track_time ? 1 : 0,
+			track_money: input.track_money !== false ? 1 : 0
 		});
 	return getAddictionTarget(Number(info.lastInsertRowid))!;
 }
@@ -568,12 +583,21 @@ export function updateAddictionTarget(
 		target_streak_days: patch.target_streak_days ?? t.target_streak_days,
 		kind: patch.kind !== undefined ? patch.kind : t.kind,
 		icon: patch.icon !== undefined ? patch.icon : t.icon,
+		mode: patch.mode ?? t.mode,
+		daily_limit_minutes: patch.daily_limit_minutes !== undefined ? patch.daily_limit_minutes : t.daily_limit_minutes,
+		no_use_before: patch.no_use_before !== undefined ? patch.no_use_before : t.no_use_before,
+		baseline_minutes_per_day: patch.baseline_minutes_per_day ?? t.baseline_minutes_per_day,
+		track_time: patch.track_time !== undefined ? (patch.track_time ? 1 : 0) : t.track_time,
+		track_money: patch.track_money !== undefined ? (patch.track_money ? 1 : 0) : t.track_money,
 		id
 	};
 	getDb()
 		.prepare(
 			`UPDATE addiction_targets SET name=@name, clean_since=@clean_since, money_per_day=@money_per_day,
-         target_streak_days=@target_streak_days, kind=@kind, icon=@icon WHERE id=@id`
+         target_streak_days=@target_streak_days, kind=@kind, icon=@icon, mode=@mode,
+         daily_limit_minutes=@daily_limit_minutes, no_use_before=@no_use_before,
+         baseline_minutes_per_day=@baseline_minutes_per_day, track_time=@track_time, track_money=@track_money
+       WHERE id=@id`
 		)
 		.run(merged);
 	return getAddictionTarget(id);
@@ -590,7 +614,6 @@ export function listAddictionTargets(opts?: { archived?: boolean }): AddictionTa
 		.prepare('SELECT * FROM addiction_targets WHERE archived = ? ORDER BY created_at ASC, id ASC')
 		.all(archived) as AddictionTarget[];
 }
-/** Mark the boss defeated: roll the current run into best, stamp defeated_at. */
 export function markBossDefeated(id: number): AddictionTarget | null {
 	const db = getDb();
 	return db.transaction((): AddictionTarget | null => {
@@ -605,7 +628,6 @@ export function markBossDefeated(id: number): AddictionTarget | null {
 		return getAddictionTarget(id);
 	})();
 }
-/** Start/clear a clean run. Clearing rolls the prior run into best first. */
 export function setCleanSince(id: number, date: string | null): AddictionTarget | null {
 	const db = getDb();
 	return db.transaction((): AddictionTarget | null => {
@@ -620,8 +642,6 @@ export function setCleanSince(id: number, date: string | null): AddictionTarget 
 		return getAddictionTarget(id);
 	})();
 }
-/** Relapse (bienveillant). With a freeze, the clean run is preserved; without,
- *  it restarts at `date`. best_streak_days never decreases. */
 export function relapse(
 	id: number,
 	date: string,
@@ -641,6 +661,46 @@ export function relapse(
 		else db.prepare('UPDATE addiction_targets SET clean_since = ? WHERE id = ?').run(date, id);
 		return { target: getAddictionTarget(id)!, usedFreeze };
 	})();
+}
+
+// =========================================================================
+//  Daily check-ins (self-report pour les boss limit / no_use_before)
+// =========================================================================
+export function insertCheckin(input: {
+	targetId: number;
+	date: string;
+	minutesUsed?: number | null;
+	respectNoUseBefore?: boolean | null;
+	coinsAwarded: number;
+}): boolean {
+	const info = getDb()
+		.prepare(
+			`INSERT OR IGNORE INTO daily_checkins (target_id, date, minutes_used, respected_no_before, coins_awarded)
+       VALUES (?, ?, ?, ?, ?)`
+		)
+		.run(
+			input.targetId,
+			input.date,
+			input.minutesUsed ?? null,
+			input.respectNoUseBefore != null ? (input.respectNoUseBefore ? 1 : 0) : null,
+			input.coinsAwarded
+		);
+	return info.changes === 1;
+}
+export function getCheckinForDate(targetId: number, date: string): DailyCheckin | null {
+	return (
+		(getDb()
+			.prepare('SELECT * FROM daily_checkins WHERE target_id = ? AND date = ?')
+			.get(targetId, date) as DailyCheckin) ?? null
+	);
+}
+export function getTodayCheckins(date: string): Record<number, DailyCheckin> {
+	const rows = getDb()
+		.prepare('SELECT * FROM daily_checkins WHERE date = ?')
+		.all(date) as DailyCheckin[];
+	const result: Record<number, DailyCheckin> = {};
+	for (const r of rows) result[r.target_id] = r;
+	return result;
 }
 
 // =========================================================================
@@ -679,7 +739,7 @@ export function deleteTriggerEntry(id: number): void {
 }
 
 // =========================================================================
-//  Push subscriptions (Web Push / VAPID)
+//  Push subscriptions
 // =========================================================================
 export function savePushSubscription(sub: WebPushKeys, userAgent?: string): PushSubscriptionRow {
 	const db = getDb();

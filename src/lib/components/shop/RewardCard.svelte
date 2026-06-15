@@ -22,8 +22,8 @@
 	} = $props();
 
 	const levelLocked = $derived(level < reward.min_level);
-	const affordable = $derived(coins >= reward.cost);
-	const missing = $derived(Math.max(0, reward.cost - coins));
+	const affordable  = $derived(coins >= reward.cost);
+	const missing     = $derived(Math.max(0, reward.cost - coins));
 </script>
 
 <div class="card flex flex-col items-center gap-2 p-3 text-center" class:opacity-70={levelLocked}>
@@ -37,7 +37,7 @@
 	{#if reward.kind === 'cosmetic'}
 		{#if owned}
 			{#if equipped}
-				<span class="pill bg-health/15 text-health">Équipé ✓</span>
+				<span class="pill bg-health/15 text-health w-full justify-center">Équipé ✓</span>
 			{:else}
 				<button class="btn-ghost w-full" onclick={() => onequip?.(reward)}>Équiper</button>
 			{/if}

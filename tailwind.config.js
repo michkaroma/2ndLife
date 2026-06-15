@@ -26,21 +26,24 @@ export default {
 				boss: 'rgb(var(--c-boss) / <alpha-value>)'
 			},
 			borderRadius: {
-				sm: '0.375rem',
-				DEFAULT: '0.625rem',
-				lg: '0.875rem',
-				xl: '1.25rem',
-				'2xl': '1.75rem',
+				sm: '2px',
+				DEFAULT: '4px',
+				lg: '4px',
+				xl: '6px',
+				'2xl': '6px',
 				pill: '9999px'
 			},
 			fontFamily: {
 				sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
-				display: ['"Space Grotesk"', 'Inter', 'system-ui', 'sans-serif']
+				display: ['"Press Start 2P"', 'monospace']
 			},
 			boxShadow: {
-				card: '0 1px 2px 0 rgb(0 0 0 / 0.30), 0 1px 1px -1px rgb(0 0 0 / 0.25)',
-				raised: '0 4px 14px -4px rgb(0 0 0 / 0.45)',
-				glow: '0 0 0 1px rgb(var(--c-primary) / 0.35), 0 0 18px -2px rgb(var(--c-primary) / 0.45)'
+				// pixel-art depth shadow (right + bottom)
+				card: '3px 3px 0 0 rgb(var(--c-border))',
+				raised: '4px 4px 0 0 rgb(0 0 0 / 0.5)',
+				glow: '0 0 0 2px rgb(var(--c-primary) / 0.6)',
+				// pressed state (inset)
+				pressed: 'inset 2px 2px 0 0 rgb(0 0 0 / 0.35)'
 			},
 			transitionTimingFunction: {
 				'out-soft': 'cubic-bezier(0.22, 1, 0.36, 1)',

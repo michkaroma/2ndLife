@@ -3,7 +3,7 @@ import { listHabits, getHabitLog, getUserState, getReward, localDate } from '$li
 import { computeHabitStreaks } from '$lib/server/streaks';
 import { levelInfoFromState } from '$lib/server/progression';
 import { ensureQuests, recomputeQuestProgress } from '$lib/server/quests';
-import type { SyncStateResponse, UserStateRow } from '$lib/types';
+import type { SyncStateResponse, UserStateRow, EquippedCosmetics } from '$lib/types';
 
 const EMPTY_USER: UserStateRow = {
 	id: 1,
@@ -13,9 +13,14 @@ const EMPTY_USER: UserStateRow = {
 	freezes: 0,
 	last_active: null,
 	last_freeze_grant: null,
-	equipped_cosmetic_id: null,
+	equipped_theme_id: null,
+	equipped_skin_id: null,
+	equipped_accessory_id: null,
+	equipped_frame_id: null,
 	created_at: ''
 };
+
+const NULL_COSMETICS: EquippedCosmetics = { theme: null, skin: null, accessory: null, frame: null };
 
 export const load: LayoutServerLoad = ({ locals }) => {
 	const date = localDate();
@@ -27,7 +32,7 @@ export const load: LayoutServerLoad = ({ locals }) => {
 			today: { date, habits: [], globalStreak: 0 },
 			quests: []
 		};
-		return { authed: false, equippedCosmetic: null, ...sync };
+		return { authed: false, equippedCosmetics: NULL_COSMETICS, ...sync };
 	}
 
 	const habits = listHabits();
@@ -44,7 +49,12 @@ export const load: LayoutServerLoad = ({ locals }) => {
 	ensureQuests(level.level, date);
 	const quests = recomputeQuestProgress(date);
 
-	const equippedCosmetic = user.equipped_cosmetic_id ? getReward(user.equipped_cosmetic_id) : null;
+	const equippedCosmetics: EquippedCosmetics = {
+		theme:     user.equipped_theme_id     ? getReward(user.equipped_theme_id)     : null,
+		skin:      user.equipped_skin_id      ? getReward(user.equipped_skin_id)      : null,
+		accessory: user.equipped_accessory_id ? getReward(user.equipped_accessory_id) : null,
+		frame:     user.equipped_frame_id     ? getReward(user.equipped_frame_id)     : null
+	};
 
 	const sync: SyncStateResponse = {
 		userState: user,
@@ -52,5 +62,5 @@ export const load: LayoutServerLoad = ({ locals }) => {
 		today: { date, habits: today, globalStreak },
 		quests
 	};
-	return { authed: true, equippedCosmetic, ...sync };
+	return { authed: true, equippedCosmetics, ...sync };
 };

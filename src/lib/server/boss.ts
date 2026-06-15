@@ -5,7 +5,7 @@ import { getDb, localDate, getAddictionTarget, markBossDefeated, addCoins, getUs
 import { runAchievementChecks } from './achievements';
 import { applyLevelUp } from './progression';
 import { levelFromXp } from '../config/progression';
-import type { AddictionTarget, AddictionKind } from '../types';
+import type { AddictionTarget, AddictionKind, BossMode, DailyCheckin } from '../types';
 
 export type BossTier = 'colossal' | 'affaibli' | 'vacillant' | 'agonisant' | 'vaincu';
 
@@ -17,12 +17,26 @@ export interface BossState {
 	cleanDays: number;
 	targetDays: number;
 	hpRemaining: number;
-	hpFraction: number; // 0..1
+	hpFraction: number;
 	bestStreakDays: number;
-	defeated: boolean; // cible atteinte OU trophée posé
-	defeatedAt: string | null; // trophée posé (victoire réclamée)
+	defeated: boolean;
+	defeatedAt: string | null;
 	tier: BossTier;
+	// argent (substances)
 	moneySaved: number;
+	moneyPerDay: number;
+	trackMoney: boolean;
+	// temps (comportementaux)
+	timeReclaimed: number;   // minutes (estimation motivante)
+	baselineMinutesPerDay: number;
+	trackTime: boolean;
+	// mode & règles
+	mode: BossMode;
+	dailyLimitMinutes: number | null;
+	noUseBefore: string | null;
+	// état du jour (check-in)
+	todayCheckin: Pick<DailyCheckin, 'id' | 'minutes_used' | 'respected_no_before'> | null;
+	// navigation
 	cleanSince: string | null;
 	nextMilestoneDays: number | null;
 }
@@ -41,13 +55,36 @@ export function bossTier(hpFraction: number, defeated: boolean): BossTier {
 	return 'agonisant';
 }
 
-export function computeBossState(row: AddictionTarget, today: string = localDate()): BossState {
+/** needsCheckin : true si le boss a une règle limit ou no_use_before (self-report journalier). */
+export function bossNeedsCheckin(row: AddictionTarget): boolean {
+	return row.mode === 'limit' || row.no_use_before != null;
+}
+
+export function computeBossState(
+	row: AddictionTarget,
+	today: string = localDate(),
+	todayCheckin: Pick<DailyCheckin, 'id' | 'minutes_used' | 'respected_no_before'> | null = null
+): BossState {
 	const clean = computeCleanStreak(row, today);
 	const cleanDays = clean.currentDays;
 	const targetDays = Math.max(BOSS.MIN_TARGET, Math.min(BOSS.MAX_TARGET, row.target_streak_days));
 	const hpRemaining = Math.max(0, targetDays - cleanDays);
 	const hpFraction = targetDays > 0 ? Math.min(1, Math.max(0, hpRemaining / targetDays)) : 0;
 	const defeated = cleanDays >= targetDays || row.defeated_at != null;
+
+	// Temps repris (estimation)
+	const baseline = row.baseline_minutes_per_day;
+	let timeReclaimed = 0;
+	if (row.track_time && baseline > 0) {
+		if (row.mode === 'abstinence') {
+			timeReclaimed = cleanDays * baseline;
+		} else {
+			// limit : on estime les minutes économisées par jour réussi
+			const savedPerDay = Math.max(0, baseline - (row.daily_limit_minutes ?? 0));
+			timeReclaimed = cleanDays * savedPerDay;
+		}
+	}
+
 	return {
 		id: row.id,
 		name: row.name,
@@ -62,12 +99,20 @@ export function computeBossState(row: AddictionTarget, today: string = localDate
 		defeatedAt: row.defeated_at,
 		tier: bossTier(hpFraction, defeated),
 		moneySaved: clean.moneySaved,
+		moneyPerDay: row.money_per_day,
+		trackMoney: Boolean(row.track_money),
+		timeReclaimed,
+		baselineMinutesPerDay: baseline,
+		trackTime: Boolean(row.track_time),
+		mode: row.mode,
+		dailyLimitMinutes: row.daily_limit_minutes,
+		noUseBefore: row.no_use_before,
+		todayCheckin,
 		cleanSince: row.clean_since,
 		nextMilestoneDays: defeated ? null : nextMilestone(cleanDays)
 	};
 }
 
-/** Marque un boss vaincu : trophée + bonus de pièces (une fois) + vérif succès. */
 export function defeatBoss(id: number): { coinsAwarded: number; unlocked: ReturnType<typeof runAchievementChecks> } | null {
 	const db = getDb();
 	return db.transaction(() => {

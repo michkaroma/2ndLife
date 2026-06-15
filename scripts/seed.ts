@@ -19,6 +19,7 @@ seedAchievementsCatalog();
 const seed = db.transaction(() => {
 	// 0. Reset (enfants d'abord)
 	db.exec(`
+    DELETE FROM daily_checkins;
     DELETE FROM trigger_journal;
     DELETE FROM habit_logs;
     DELETE FROM quests;
@@ -29,13 +30,16 @@ const seed = db.transaction(() => {
     DELETE FROM level_events;
     UPDATE achievements SET unlocked_at = NULL;
     DELETE FROM sqlite_sequence WHERE name IN
-      ('habits','habit_logs','quests','rewards','addiction_targets','trigger_journal','owned_cosmetics','level_events');
+      ('habits','habit_logs','quests','rewards','addiction_targets','trigger_journal','owned_cosmetics','level_events','daily_checkins');
   `);
 
 	// 1. user_state (≈ niveau 10)
 	db.prepare(
 		`UPDATE user_state SET total_xp=12000, coins=640, prestige=0, freezes=2,
-       last_active=?, last_freeze_grant=NULL, equipped_cosmetic_id=NULL WHERE id=1`
+       last_active=?, last_freeze_grant=NULL,
+       equipped_theme_id=NULL, equipped_skin_id=NULL,
+       equipped_accessory_id=NULL, equipped_frame_id=NULL
+     WHERE id=1`
 	).run(today);
 
 	// 2. habits
@@ -71,13 +75,31 @@ const seed = db.transaction(() => {
 	const skip6 = new Set([29, 27, 24, 23, 19, 16, 12, 9, 6]);
 	for (let n = 29; n >= 0; n--) if (!skip6.has(n)) insLog.run(6, daysAgo(n), 'done', null);
 
-	// 4. addiction_targets (boss)
-	const insTarget = db.prepare(
-		`INSERT INTO addiction_targets (id, name, clean_since, money_per_day, best_streak_days, target_streak_days, kind, icon)
-     VALUES (?,?,?,?,?,?,?,?)`
+	// 4. addiction_targets (boss) — substance + comportementaux
+	const insTarget = db.prepare(`
+    INSERT INTO addiction_targets
+      (id, name, clean_since, money_per_day, best_streak_days, target_streak_days, kind, icon,
+       mode, daily_limit_minutes, no_use_before,
+       baseline_minutes_per_day, track_time, track_money)
+    VALUES (?,?,?,?,?,?,?,?, ?,?,?, ?,?,?)`);
+
+	// Boss substance : abstinence classique
+	insTarget.run(
+		1, 'Cigarette', daysAgo(73), 12.5, 73, 90, 'tabac', '🚬',
+		'abstinence', null, null,
+		0, 0, 1
 	);
-	insTarget.run(1, 'Cigarette', daysAgo(73), 12.5, 73, 90, 'tabac', '🚬');
-	insTarget.run(2, 'Sucre / grignotage', daysAgo(11), 4.0, 41, 60, 'sucre', '🍩');
+	insTarget.run(
+		2, 'Sucre / grignotage', daysAgo(11), 4.0, 41, 60, 'sucre', '🍩',
+		'abstinence', null, null,
+		0, 0, 1
+	);
+	// Boss comportemental : réseaux sociaux avec limite journalière
+	insTarget.run(
+		3, 'Réseaux sociaux', daysAgo(14), 0, 14, 30, 'reseaux', '📱',
+		'limit', 45, null,
+		120, 1, 0
+	);
 
 	// 5. trigger_journal (heures variées pour les tendances)
 	const insTrig = db.prepare(
@@ -88,19 +110,26 @@ const seed = db.transaction(() => {
 	insTrig.run(1, `${daysAgo(4)} 21:10:00`, 'Soirée entre amis', 6, "Tentation sociale, j'ai bu un verre d'eau à la place.", 0);
 	insTrig.run(2, `${daysAgo(11)} 22:30:00`, 'Ennui le soir', 8, "J'ai cédé, mais je note et je repars demain.", 1);
 	insTrig.run(2, `${daysAgo(2)} 16:00:00`, 'Fatigue après-midi', 5, 'Envie de sucré, remplacée par un fruit.', 0);
+	insTrig.run(3, `${daysAgo(3)} 20:00:00`, 'Ennui du soir', 6, "Scroll automatique, j'ai posé le téléphone.", 0);
 });
 
 seed();
 
 // 6. Boutique : (ré)initialise le catalogue, équipe un cosmétique de démo.
 seedShop();
-const cap = db.prepare(`SELECT id FROM rewards WHERE kind='cosmetic' ORDER BY cost ASC LIMIT 1`).get() as
-	| { id: number }
-	| undefined;
+const cap = db.prepare(
+	`SELECT r.id, r.category FROM rewards r WHERE r.kind='cosmetic' AND r.category IS NOT NULL ORDER BY r.cost ASC LIMIT 1`
+).get() as { id: number; category: string } | undefined;
 if (cap) {
 	db.prepare(`UPDATE rewards SET claimed_at = datetime('now') WHERE id=?`).run(cap.id);
 	db.prepare(`INSERT OR IGNORE INTO owned_cosmetics (reward_id) VALUES (?)`).run(cap.id);
-	db.prepare(`UPDATE user_state SET equipped_cosmetic_id=? WHERE id=1`).run(cap.id);
+	const col = {
+		theme: 'equipped_theme_id',
+		avatar_skin: 'equipped_skin_id',
+		accessory: 'equipped_accessory_id',
+		badge_frame: 'equipped_frame_id'
+	}[cap.category];
+	if (col) db.prepare(`UPDATE user_state SET ${col}=? WHERE id=1`).run(cap.id);
 }
 
 // 7. Débloque les succès mérités par le profil de démo, puis fige les compteurs.

@@ -12,10 +12,15 @@ export const COMMON_TRIGGERS = [
 	'Entourage'
 ] as const;
 
+// Comportementaux en premier (ordre d'affichage dans le formulaire).
 export const ADDICTION_KINDS = [
-	{ value: 'tabac', label: 'Tabac', icon: '🚬' },
-	{ value: 'alcool', label: 'Alcool', icon: '🍷' },
-	{ value: 'sucre', label: 'Sucre / malbouffe', icon: '🍩' },
-	{ value: 'ecrans', label: 'Écrans / réseaux', icon: '📱' },
-	{ value: 'autre', label: 'Autre', icon: '👾' }
+	{ value: 'reseaux', label: 'Réseaux sociaux / scroll', icon: '📱', behavioral: true },
+	{ value: 'jeux', label: 'Jeux vidéo', icon: '🎮', behavioral: true },
+	{ value: 'ecrans', label: 'Écrans (général)', icon: '🖥️', behavioral: true },
+	{ value: 'tabac', label: 'Tabac', icon: '🚬', behavioral: false },
+	{ value: 'alcool', label: 'Alcool', icon: '🍷', behavioral: false },
+	{ value: 'sucre', label: 'Sucre / malbouffe', icon: '🍩', behavioral: false },
+	{ value: 'autre', label: 'Autre', icon: '👾', behavioral: false }
 ] as const;
+
+export type AddictionKindValue = (typeof ADDICTION_KINDS)[number]['value'];

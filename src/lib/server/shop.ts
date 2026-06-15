@@ -2,7 +2,6 @@
 import { listRewards, createReward } from './db';
 import { COSMETICS, REAL_REWARD_SEEDS } from '../config/shop';
 
-/** Seed initial de la boutique (uniquement si la table rewards est vide). */
 export function seedShop(): void {
 	if (listRewards().length > 0) return;
 	for (const c of COSMETICS) {
@@ -10,6 +9,8 @@ export function seedShop(): void {
 			name: c.name,
 			cost: c.cost,
 			kind: 'cosmetic',
+			category: c.category,
+			asset_id: c.assetId,
 			icon: c.icon,
 			description: c.description,
 			min_level: c.unlockLevel,

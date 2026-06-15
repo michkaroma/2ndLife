@@ -9,7 +9,9 @@ export type QuestScope = 'daily' | 'weekly';
 export type RewardKind = 'cosmetic' | 'real';
 export type LevelEventType = 'level_up' | 'prestige';
 export type Difficulty = 1 | 2 | 3;
-export type AddictionKind = 'tabac' | 'alcool' | 'sucre' | 'ecrans' | 'autre';
+export type AddictionKind = 'tabac' | 'alcool' | 'sucre' | 'ecrans' | 'reseaux' | 'jeux' | 'autre';
+export type BossMode = 'abstinence' | 'limit';
+export type CosmeticSlot = 'theme' | 'avatar_skin' | 'accessory' | 'badge_frame';
 
 export type QuestKind =
 	| 'generic'
@@ -29,7 +31,10 @@ export interface UserStateRow {
 	freezes: number;
 	last_active: string | null;
 	last_freeze_grant: string | null;
-	equipped_cosmetic_id: number | null;
+	equipped_theme_id: number | null;
+	equipped_skin_id: number | null;
+	equipped_accessory_id: number | null;
+	equipped_frame_id: number | null;
 	created_at: string;
 }
 export interface Habit {
@@ -80,6 +85,8 @@ export interface Reward {
 	name: string;
 	cost: number;
 	kind: RewardKind;
+	category: string | null;   // CosmeticSlot pour les cosmétiques
+	asset_id: string | null;   // pour la résolution sprite
 	icon: string | null;
 	description: string | null;
 	min_level: number;
@@ -89,14 +96,29 @@ export interface Reward {
 export interface AddictionTarget {
 	id: number;
 	name: string;
-	clean_since: string | null;
-	money_per_day: number;
-	best_streak_days: number;
-	target_streak_days: number;
 	kind: AddictionKind | null;
 	icon: string | null;
-	archived: number;
+	clean_since: string | null;
+	target_streak_days: number;
+	best_streak_days: number;
 	defeated_at: string | null;
+	archived: number;
+	created_at: string;
+	mode: BossMode;
+	daily_limit_minutes: number | null;
+	no_use_before: string | null;
+	baseline_minutes_per_day: number;
+	track_time: number;
+	track_money: number;
+	money_per_day: number;
+}
+export interface DailyCheckin {
+	id: number;
+	target_id: number;
+	date: string;
+	minutes_used: number | null;
+	respected_no_before: number | null;
+	coins_awarded: number;
 	created_at: string;
 }
 export interface TriggerEntry {
@@ -145,6 +167,8 @@ export interface NewReward {
 	name: string;
 	cost: number;
 	kind: RewardKind;
+	category?: string | null;
+	asset_id?: string | null;
 	icon?: string | null;
 	description?: string | null;
 	min_level?: number;
@@ -157,6 +181,12 @@ export interface NewAddictionTarget {
 	target_streak_days?: number;
 	kind?: AddictionKind;
 	icon?: string | null;
+	mode?: BossMode;
+	daily_limit_minutes?: number | null;
+	no_use_before?: string | null;
+	baseline_minutes_per_day?: number;
+	track_time?: boolean;
+	track_money?: boolean;
 }
 export interface NewTriggerEntry {
 	target_id: number | null;
@@ -236,6 +266,14 @@ export interface SyncStateResponse {
 	level: LevelInfo;
 	today: TodayView;
 	quests: Quest[];
+}
+
+// ---------- per-category equipped cosmetics ----------
+export interface EquippedCosmetics {
+	theme: Reward | null;
+	skin: Reward | null;
+	accessory: Reward | null;
+	frame: Reward | null;
 }
 
 // ---------- feedback / UI ----------

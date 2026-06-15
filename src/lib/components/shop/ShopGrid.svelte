@@ -7,7 +7,7 @@
 		coins,
 		level,
 		ownedIds,
-		equippedId,
+		equippedIds,
 		onbuy,
 		onequip,
 		ondelete
@@ -16,14 +16,19 @@
 		coins: number;
 		level: number;
 		ownedIds: number[];
-		equippedId: number | null;
+		equippedIds: Record<string, number | null>;
 		onbuy: (r: Reward) => void;
 		onequip: (r: Reward) => void;
 		ondelete: (r: Reward) => void;
 	} = $props();
 
 	const cosmetics = $derived(rewards.filter((r) => r.kind === 'cosmetic'));
-	const reals = $derived(rewards.filter((r) => r.kind === 'real'));
+	const reals     = $derived(rewards.filter((r) => r.kind === 'real'));
+
+	function isEquipped(r: Reward): boolean {
+		if (!r.category) return false;
+		return equippedIds[r.category] === r.id;
+	}
 </script>
 
 <div class="flex flex-col gap-4">
@@ -36,7 +41,7 @@
 					{level}
 					{coins}
 					owned={ownedIds.includes(r.id)}
-					equipped={equippedId === r.id}
+					equipped={isEquipped(r)}
 					{onbuy}
 					{onequip}
 				/>

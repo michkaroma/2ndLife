@@ -19,15 +19,25 @@
 	// Création
 	let creating = $state(false);
 	let nName = $state('');
-	let nKind = $state('autre');
-	let nMoney = $state(0);
+	let nKind = $state('reseaux');  // comportemental par défaut
 	let nTarget = $state(90);
 	let nClean = $state(todayStr());
+	// Champs comportementaux
+	let nMode = $state<'abstinence' | 'limit'>('abstinence');
+	let nLimit = $state(30);
+	let nNoUseBeforeEnabled = $state(false);
+	let nNoUseBefore = $state('09:00');
+	let nBaseline = $state(90);
+	// Champs substances
+	let nMoney = $state(0);
+
+	const selectedKind = $derived(ADDICTION_KINDS.find((k) => k.value === nKind));
+	const isBehavioral = $derived(selectedKind?.behavioral === true);
 
 	// Rechute
 	let relapseBoss = $state<BossState | null>(null);
 
-	// Date de début (clean)
+	// Date de début
 	let cleanBoss = $state<BossState | null>(null);
 	let cleanDate = $state(todayStr());
 
@@ -45,16 +55,34 @@
 				body: JSON.stringify({
 					name: nName.trim(),
 					kind: nKind,
-					money_per_day: nMoney,
 					target_streak_days: nTarget,
-					clean_since: nClean || null
+					clean_since: nClean || null,
+					...(isBehavioral
+						? {
+								mode: nMode,
+								daily_limit_minutes: nMode === 'limit' ? nLimit : null,
+								no_use_before: nNoUseBeforeEnabled ? nNoUseBefore : null,
+								baseline_minutes_per_day: nBaseline,
+								track_time: true,
+								track_money: false
+							}
+						: {
+								mode: 'abstinence',
+								money_per_day: nMoney,
+								track_money: true,
+								track_time: false
+							})
 				})
 			});
 			creating = false;
 			nName = '';
+			nKind = 'reseaux';
 			nMoney = 0;
 			nTarget = 90;
-			nKind = 'autre';
+			nMode = 'abstinence';
+			nLimit = 30;
+			nNoUseBeforeEnabled = false;
+			nBaseline = 90;
 			await invalidateAll();
 		} catch (err) {
 			celebration.toast(err instanceof ApiFailure ? err.message : 'Création impossible.', 'danger');
@@ -90,6 +118,30 @@
 		}
 	}
 
+	async function oncheckin(
+		boss: BossState,
+		minutesUsed: number | null,
+		respectNoUseBefore: boolean | null
+	): Promise<{ success: boolean; coinsAwarded?: number }> {
+		try {
+			const r = await apiFetch<{ success: boolean; coinsAwarded: number }>(
+				`/api/addictions/${boss.id}/checkin`,
+				{
+					method: 'POST',
+					body: JSON.stringify({ minutesUsed, respectNoUseBefore })
+				}
+			);
+			if (r.success) {
+				celebration.toast(`Journée réussie ! +${r.coinsAwarded} pièces 🎉`, 'success');
+				await invalidateAll();
+			}
+			return r;
+		} catch (err) {
+			celebration.toast(err instanceof ApiFailure ? err.message : 'Action impossible.', 'danger');
+			return { success: false };
+		}
+	}
+
 	async function relapseConfirm(p: {
 		useFreeze: boolean;
 		trigger: string | null;
@@ -119,7 +171,7 @@
 			});
 			for (const a of r.unlockedAchievements) celebration.pushAchievement(a);
 			journalOpen = false;
-			celebration.toast('Noté. C’est déjà une victoire. 💙', 'success');
+			celebration.toast("Noté. C'est déjà une victoire. 💙", 'success');
 			await invalidateAll();
 		} catch (err) {
 			celebration.toast(err instanceof ApiFailure ? err.message : 'Enregistrement impossible.', 'danger');
@@ -139,22 +191,66 @@
 
 	{#if creating}
 		<form class="card flex flex-col gap-3" onsubmit={createBoss}>
-			<input class="input" bind:value={nName} placeholder="Nom (ex : Cigarette)" maxlength="60" required />
+			<input
+				class="input"
+				bind:value={nName}
+				placeholder={isBehavioral ? 'ex : Instagram' : 'ex : Cigarette'}
+				maxlength="60"
+				required
+			/>
+
 			<div>
 				<label class="label" for="nk">Type</label>
 				<select id="nk" class="input" bind:value={nKind}>
 					{#each ADDICTION_KINDS as k (k.value)}<option value={k.value}>{k.icon} {k.label}</option>{/each}
 				</select>
 			</div>
-			<div class="grid grid-cols-2 gap-2">
+
+			{#if isBehavioral}
+				<!-- Champs comportementaux -->
+				<div>
+					<!-- svelte-ignore a11y_label_has_associated_control -->
+					<label class="label">Mode</label>
+					<div class="flex gap-2" role="group" aria-label="Mode de suivi">
+						<button type="button"
+							class="btn flex-1 {nMode === 'abstinence' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => (nMode = 'abstinence')}>Abstinence</button>
+						<button type="button"
+							class="btn flex-1 {nMode === 'limit' ? 'btn-primary' : 'btn-ghost'}"
+							onclick={() => (nMode = 'limit')}>Limiter l'usage</button>
+					</div>
+				</div>
+
+				{#if nMode === 'limit'}
+					<div>
+						<label class="label" for="nlimit">Limite quotidienne (min)</label>
+						<input id="nlimit" class="input" type="number" min="1" max="1440" bind:value={nLimit} />
+					</div>
+				{/if}
+
+				<div class="flex items-center gap-2">
+					<input id="nnob" type="checkbox" bind:checked={nNoUseBeforeEnabled} />
+					<label for="nnob" class="text-sm">Règle « pas avant … »</label>
+				</div>
+				{#if nNoUseBeforeEnabled}
+					<input class="input" type="time" bind:value={nNoUseBefore} />
+				{/if}
+
+				<div>
+					<label class="label" for="nbl">Minutes/jour avant (baseline)</label>
+					<input id="nbl" class="input" type="number" min="0" max="1440" bind:value={nBaseline} />
+				</div>
+			{:else}
+				<!-- Champs substance -->
 				<div>
 					<label class="label" for="nm">€ / jour économisés</label>
 					<input id="nm" class="input" type="number" min="0" step="0.5" bind:value={nMoney} />
 				</div>
-				<div>
-					<label class="label" for="nt">Objectif (jours)</label>
-					<input id="nt" class="input" type="number" min="7" max="365" bind:value={nTarget} />
-				</div>
+			{/if}
+
+			<div>
+				<label class="label" for="nt">Objectif (jours)</label>
+				<input id="nt" class="input" type="number" min="7" max="365" bind:value={nTarget} />
 			</div>
 			<div>
 				<label class="label" for="ncl">Clean depuis</label>
@@ -167,7 +263,7 @@
 	{#if data.bosses.length === 0 && !creating}
 		<div class="card flex flex-col items-center gap-3 py-10 text-center">
 			<div class="text-4xl">🛡️</div>
-			<p class="text-muted">Aucun boss pour l'instant. Définis une addiction à vaincre.</p>
+			<p class="text-muted">Aucun boss pour l'instant. Définis un défi à vaincre.</p>
 			<button class="btn-primary" onclick={() => (creating = true)}>Ajouter un boss</button>
 		</div>
 	{:else}
@@ -178,6 +274,7 @@
 				onrelapse={(b) => (relapseBoss = b)}
 				{onsetclean}
 				{ondefeat}
+				{oncheckin}
 			/>
 		{/each}
 	{/if}
@@ -229,9 +326,7 @@
 			onkeydown={(e) => e.stopPropagation()}
 		>
 			<h2 class="text-lg font-bold">Depuis quand es-tu clean ?</h2>
-			<p class="mt-1 text-sm text-muted">
-				On comptera tes jours clean à partir de cette date.
-			</p>
+			<p class="mt-1 text-sm text-muted">On comptera tes jours clean à partir de cette date.</p>
 			<input class="input mt-3" type="date" max={todayStr()} bind:value={cleanDate} />
 			<div class="mt-4 flex gap-2">
 				<button class="btn-primary flex-1" onclick={confirmClean}>Valider</button>

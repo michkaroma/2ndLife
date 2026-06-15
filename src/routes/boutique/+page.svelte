@@ -79,7 +79,7 @@
 		coins={data.coins}
 		level={data.level}
 		ownedIds={data.ownedIds}
-		equippedId={data.equippedId}
+		equippedIds={data.equippedIds}
 		{onbuy}
 		{onequip}
 		{ondelete}
