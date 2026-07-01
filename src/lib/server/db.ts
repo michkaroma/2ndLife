@@ -9,6 +9,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { runMigrations } from './migrations';
 import { PROGRESSION, levelFromXp } from '../config/progression';
+import { COIN_ECONOMY } from '../config/shop';
 import type {
 	UserStateRow,
 	Habit,
@@ -65,6 +66,7 @@ export function getDb(): Database.Database {
 export function initDb(): void {
 	getDb();
 	if (getSetting('reminder_hour') === null) setSetting('reminder_hour', 20);
+	if (getSetting('timezone') === null) setSetting('timezone', 'Europe/Paris');
 }
 
 export function closeDb(): void {
@@ -77,30 +79,78 @@ export function closeDb(): void {
 // =========================================================================
 //  Date / period helpers
 // =========================================================================
-export function localDate(d: Date = new Date()): string {
-	const y = d.getFullYear();
-	const m = String(d.getMonth() + 1).padStart(2, '0');
-	const day = String(d.getDate()).padStart(2, '0');
-	return `${y}-${m}-${day}`;
+
+// --- Fuseau horaire (socle) ---
+// Le fuseau est stocké dans la table `settings` (chaîne IANA). Il sert à
+// calculer « aujourd'hui » à l'heure locale RÉELLE de l'utilisateur (pas
+// l'heure de la machine) → indispensable aux rappels et au module sommeil.
+let _tz: string | null = null;
+
+export function getTimezone(): string {
+	if (_tz) return _tz;
+	_tz = getSetting<string>('timezone') ?? 'Europe/Paris';
+	return _tz;
 }
 
-export function localDateTime(d: Date = new Date()): string {
-	const p = (n: number) => String(n).padStart(2, '0');
-	return `${localDate(d)} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+/** Valide (Intl throw si invalide) puis persiste + invalide le cache. */
+export function setTimezone(tz: string): void {
+	new Intl.DateTimeFormat('en-CA', { timeZone: tz }); // RangeError si fuseau inconnu
+	setSetting('timezone', tz);
+	_tz = tz;
+}
+
+// ⚠️ Règle d'or : `localDate` / `localDateTime` ne prennent QU'UN instant réel
+// (`now`). Toute arithmétique calendaire passe par `addDays` (UTC pur sur chaîne),
+// JAMAIS par une Date locale repassée à `localDate`.
+export function localDate(d: Date = new Date(), tz: string = getTimezone()): string {
+	const p = Object.fromEntries(
+		new Intl.DateTimeFormat('en-CA', {
+			timeZone: tz,
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit'
+		})
+			.formatToParts(d)
+			.map((x) => [x.type, x.value])
+	);
+	return `${p.year}-${p.month}-${p.day}`;
+}
+
+export function localDateTime(d: Date = new Date(), tz: string = getTimezone()): string {
+	const p = Object.fromEntries(
+		new Intl.DateTimeFormat('en-CA', {
+			timeZone: tz,
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			minute: '2-digit',
+			second: '2-digit',
+			hour12: false
+		})
+			.formatToParts(d)
+			.map((x) => [x.type, x.value])
+	);
+	const hh = p.hour === '24' ? '00' : p.hour; // normalise minuit
+	return `${p.year}-${p.month}-${p.day} ${hh}:${p.minute}:${p.second}`;
+}
+
+/** Décale une date 'YYYY-MM-DD' de `n` jours (arithmétique UTC pure, sans fuseau). */
+export function addDays(date: string, n: number): string {
+	const [y, m, d] = date.split('-').map(Number);
+	const dt = new Date(Date.UTC(y, m - 1, d));
+	dt.setUTCDate(dt.getUTCDate() + n);
+	const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+	const dd = String(dt.getUTCDate()).padStart(2, '0');
+	return `${dt.getUTCFullYear()}-${mm}-${dd}`;
 }
 
 export function previousDate(date: string): string {
-	const [y, m, d] = date.split('-').map(Number);
-	const dt = new Date(y, m - 1, d);
-	dt.setDate(dt.getDate() - 1);
-	return localDate(dt);
+	return addDays(date, -1);
 }
 
 export function nextDate(date: string): string {
-	const [y, m, d] = date.split('-').map(Number);
-	const dt = new Date(y, m - 1, d);
-	dt.setDate(dt.getDate() + 1);
-	return localDate(dt);
+	return addDays(date, 1);
 }
 
 export function daysBetween(a: string, b: string): number {
@@ -133,13 +183,9 @@ export function isoWeek(date: string = localDate()): string {
  */
 export function weekBounds(date: string = localDate()): { start: string; end: string } {
 	const [y, m, d] = date.split('-').map(Number);
-	const dt = new Date(y, m - 1, d);
-	const dow = (dt.getDay() + 6) % 7; // Lundi = 0
-	const start = new Date(dt);
-	start.setDate(dt.getDate() - dow);
-	const end = new Date(start);
-	end.setDate(start.getDate() + 6);
-	return { start: localDate(start), end: localDate(end) };
+	const dow = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7; // Lundi = 0
+	const start = addDays(date, -dow);
+	return { start, end: addDays(start, 6) };
 }
 
 // =========================================================================
@@ -238,6 +284,7 @@ export function prestige(): number | null {
 		const newPrestige = s.prestige + 1;
 		db.prepare('UPDATE user_state SET total_xp = 0, prestige = ? WHERE id = 1').run(newPrestige);
 		logLevelEvent('prestige', level, 1, newPrestige);
+		addCoins(COIN_ECONOMY.PRESTIGE_BONUS); // = 500
 		return newPrestige;
 	})();
 }

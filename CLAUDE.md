@@ -74,6 +74,11 @@ scripts/            seed.ts (données de démo), generate-icons.ts
   - **Objectifs hebdomadaires** (`habits.frequency_type`/`weekly_quota`) : XP par check-in + bonus de quota via registre idempotent `weekly_goal_awards` (mémorise le quota d'octroi → relever le quota ne reprend jamais un bonus mérité), série hebdo en semaines (`streaks.weeklyStatus`). Affichage X/N dans `HabitRow`, choix de fréquence dans `HabitForm`. `weekBounds` centralisé dans `db.ts` (quests + achievements l'importent).
   - **L'Armurerie** (modale au clic sur l'avatar) : renommage (`user_state.player_name`, `/api/character`), équip/déséquip par catégorie (slots existants ; DELETE sur `/api/rewards/[id]/equip`). Visuel extrait dans `AvatarSprite.svelte` (réutilisé par AvatarCard + preview). NB : seul l'accessoire est rendu en sprite ; thème/tenue/cadre restent data-only (en attente du layering SVG complet).
   - Revue adversariale (3 relecteurs) : 1 correctif appliqué (claw-back non-punitif sur hausse de quota). check 0 + build OK.
+- [x] **Étape 12 — Fuseau horaire + dates fiables ; fix bug du vide ; prestige branché** :
+  - **Fuseau horaire** : réglage `timezone` (chaîne IANA, défaut `Europe/Paris`) stocké dans `settings` (pas de migration). `getTimezone()`/`setTimezone()` (cache module `_tz`, validation via `Intl`). `localDate`/`localDateTime` calculent « maintenant » dans ce fuseau via `formatToParts`. Endpoint `POST /api/settings/timezone` + section « Fuseau horaire » dans `/reglages` (champ pré-rempli depuis le navigateur). Cron du rappel programmé avec `{ timezone }` (lu au démarrage ; reschedule à chaud repoussé au prompt 2).
+  - **Dates UTC-pures** : `addDays(date, n)` (arithmétique UTC sur chaîne). `previousDate`/`nextDate`/`weekBounds` (db.ts) et `weeklyStatus`/`weeklyStreakBefore` (streaks.ts, `shiftDays` supprimé) découplés de `localDate`. **Règle d'or : `localDate`/`localDateTime` ne prennent qu'un instant réel (`now`) ; toute arithmétique calendaire passe par `addDays`.**
+  - **Bug du vide** : `w_no_relapse` (quests.ts) gardée par `hasTrackedAbstinence` (≥1 boss non archivé OU ≥1 habitude `break` non archivée) → plus de pré-validation sur base vide. Abstinence passive non pénalisée.
+  - **Prestige** : `prestige()` crédite `COIN_ECONOMY.PRESTIGE_BONUS` (500 pièces) dans sa transaction. `POST /api/prestige` (guard `NOT_ELIGIBLE` < niveau 50, débloque `prestige_1`/`prestige_3`). Section « Prestige » dans `/reglages` (visible ≥ niv. 50) + `ConfirmDialog` + `invalidateAll()` + toast `gold`. check 0 + build OK.
 
 ## Conventions
 
@@ -81,4 +86,5 @@ scripts/            seed.ts (données de démo), generate-icons.ts
 - Pas d'authentification complexe : un seul mot de passe (`APP_PASSWORD`) → cookie signé.
 - Anti-farming : contrainte `UNIQUE(habit_id, date)` ; 1 validation max / habitude / jour.
 - Rechutes : **jamais punitives** (voir §7 du brief) — données neutres, ton encourageant.
+- **Dates** : `localDate`/`localDateTime` réservées à « maintenant » (fuseau `getTimezone()`). Pour décaler/comparer des dates calendaires, utiliser `addDays` (UTC pur) — jamais une `Date` locale repassée à `localDate`.
 - Commit après chaque étape.

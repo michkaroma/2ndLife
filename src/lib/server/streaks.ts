@@ -5,7 +5,7 @@
 // break the streak. 'skipped'/'relapsed' simply aren't in the 'done' set; a
 // freeze is materialised by the progression engine as a synthetic 'done' log.
 
-import { getHabitLogDates, previousDate, localDate, daysBetween, isoWeek, weekBounds } from './db';
+import { getHabitLogDates, previousDate, localDate, daysBetween, isoWeek, weekBounds, addDays } from './db';
 import type { StreakInfo, CleanStreakInfo, AddictionTarget, WeeklyStatus } from '../types';
 
 export { daysBetween };
@@ -66,14 +66,6 @@ export function computeHabitStreaks(habitId: number, today: string = localDate()
 //  Weekly goals (objectifs « X fois / semaine » — Feature 3)
 // =========================================================================
 
-/** Décale une date 'YYYY-MM-DD' de `delta` jours (math calendaire locale). */
-function shiftDays(date: string, delta: number): string {
-	const [y, m, d] = date.split('-').map(Number);
-	const dt = new Date(y, m - 1, d);
-	dt.setDate(dt.getDate() + delta);
-	return localDate(dt);
-}
-
 /** Nombre de jours 'done' regroupés par semaine ISO. */
 function doneCountByWeek(habitId: number): Map<string, number> {
 	const byWeek = new Map<string, number>();
@@ -106,7 +98,7 @@ export function weeklyStatus(
 	let anchorMonday: string | null = null;
 	if (met(curWeek)) anchorMonday = curMonday;
 	else {
-		const prevMonday = shiftDays(curMonday, -7);
+		const prevMonday = addDays(curMonday, -7);
 		if (met(isoWeek(prevMonday))) anchorMonday = prevMonday;
 	}
 
@@ -115,7 +107,7 @@ export function weeklyStatus(
 		let cursor = anchorMonday;
 		while (met(isoWeek(cursor))) {
 			streak++;
-			cursor = shiftDays(cursor, -7);
+			cursor = addDays(cursor, -7);
 		}
 	}
 	return { count, quota: q, met: count >= q, streak };
@@ -134,10 +126,10 @@ export function weeklyStreakBefore(
 	const { start: curMonday } = weekBounds(date);
 
 	let streak = 0;
-	let cursor = shiftDays(curMonday, -7);
+	let cursor = addDays(curMonday, -7);
 	while (met(isoWeek(cursor))) {
 		streak++;
-		cursor = shiftDays(cursor, -7);
+		cursor = addDays(cursor, -7);
 	}
 	return streak;
 }

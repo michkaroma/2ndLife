@@ -141,6 +141,15 @@ function computeAggregates(date: string): Aggregates {
 				.get(start, end)
 		);
 
+	// Garde d'abstinence réellement suivie : la quête « sans aucune rechute » ne
+	// doit se valider que si une abstinence est effectivement suivie (boss actif
+	// ou habitude 'break'). Sinon, sur base vide, `relapses === 0` la pré-validait.
+	// L'abstinence passive suffit (pas besoin d'activité positive de la semaine).
+	const hasTrackedAbstinence =
+		num(db.prepare(`SELECT COUNT(*) c FROM addiction_targets WHERE archived=0`).get()) +
+			num(db.prepare(`SELECT COUNT(*) c FROM habits WHERE archived=0 AND type='break'`).get()) >
+		0;
+
 	let maxCurrentStreak = 0;
 	for (const h of listHabits()) {
 		if (h.type !== 'build') continue;
@@ -158,7 +167,7 @@ function computeAggregates(date: string): Aggregates {
 		weeklyCleanDays,
 		weeklyVarietyDays,
 		weeklyJournal,
-		weeklyNoRelapse: relapses === 0,
+		weeklyNoRelapse: relapses === 0 && hasTrackedAbstinence,
 		maxCurrentStreak
 	};
 }

@@ -3,7 +3,7 @@ import type { Handle, ServerInit } from '@sveltejs/kit';
 import { redirect, error } from '@sveltejs/kit';
 import cron from 'node-cron';
 import { SESSION_COOKIE, verifySession } from '$lib/server/auth';
-import { initDb } from '$lib/server/db';
+import { initDb, getTimezone } from '$lib/server/db';
 import { seedAchievementsCatalog } from '$lib/server/achievements';
 import { seedShop } from '$lib/server/shop';
 import { env } from '$lib/server/env';
@@ -32,10 +32,15 @@ export const init: ServerInit = async () => {
 	started = true;
 	const [h, m] = env.PUSH_TIME.split(':');
 	if (cron.validate(`${Number(m)} ${Number(h)} * * *`)) {
-		cron.schedule(`${Number(m)} ${Number(h)} * * *`, async () => {
-			await sendToAll(buildDailyReminder());
-		});
-		console.log(`[cron] Rappel quotidien programmé à ${env.PUSH_TIME}`);
+		cron.schedule(
+			`${Number(m)} ${Number(h)} * * *`,
+			async () => {
+				await sendToAll(buildDailyReminder());
+			},
+			{ timezone: getTimezone() }
+		);
+		// TODO(prompt-2): reprogrammer le cron à chaud quand le fuseau change
+		console.log(`[cron] Rappel quotidien programmé à ${env.PUSH_TIME} (${getTimezone()})`);
 	}
 };
 
