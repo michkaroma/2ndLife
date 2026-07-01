@@ -4,6 +4,9 @@
 export const COIN_ECONOMY = {
 	PER_HABIT: 5,            // pièces par habitude "build" validée
 	PER_CLEAN_DAY: 6,        // pièces par journée "clean" (habitude "break" ou check-in boss)
+	PER_WEEKLY_CHECKIN: 3,   // pièces par check-in d'objectif hebdomadaire
+	WEEKLY_QUOTA_BONUS: 12,  // pièces bonus à l'atteinte du quota hebdo (une fois / semaine)
+	ONE_TIME_TASK: [4, 9, 16], // pièces par tâche ponctuelle selon la difficulté (index 0 = diff. 1)
 	LEVEL_UP_BASE: 10,       // pièces de base à la montée de niveau
 	LEVEL_UP_PER_LEVEL: 2,   // + par niveau atteint
 	PRESTIGE_BONUS: 500      // bonus de pièces au prestige
@@ -11,6 +14,12 @@ export const COIN_ECONOMY = {
 
 export function coinsForLevelUp(level: number): number {
 	return COIN_ECONOMY.LEVEL_UP_BASE + level * COIN_ECONOMY.LEVEL_UP_PER_LEVEL;
+}
+
+/** Pièces d'une tâche ponctuelle selon sa difficulté (1..3). */
+export function coinsForOneTimeTask(difficulty: number): number {
+	const i = Math.min(Math.max(Math.round(difficulty), 1), 3) - 1;
+	return COIN_ECONOMY.ONE_TIME_TASK[i];
 }
 
 export type ShopCategory = 'avatar_skin' | 'accessory' | 'theme' | 'badge_frame';

@@ -4,10 +4,14 @@
 	import { celebration, celebrateFromDelta } from '$lib/stores/celebration.svelte';
 	import { claimQuest, ApiFailure } from '$lib/client/api';
 	import AvatarCard from '$lib/components/game/AvatarCard.svelte';
+	import Armurerie from '$lib/components/game/Armurerie.svelte';
 	import HabitRow from '$lib/components/habits/HabitRow.svelte';
 	import QuestList from '$lib/components/quests/QuestList.svelte';
+	import TaskSection from '$lib/components/tasks/TaskSection.svelte';
 
 	let { data }: { data: PageData } = $props();
+
+	let armoryOpen = $state(false);
 
 	const habits = $derived(data.today.habits);
 	const remaining = $derived(
@@ -32,15 +36,27 @@
 <svelte:head><title>Aujourd'hui · HabitQuest</title></svelte:head>
 
 <div class="flex flex-col gap-4">
-	<AvatarCard
-		level={gameState.level.level}
-		intoLevel={gameState.level.intoLevel}
-		needed={gameState.level.needed}
-		coins={gameState.user.coins}
-		prestige={gameState.level.prestige}
-		topStreak={gameState.globalStreak}
-		accessory={data.equippedCosmetics.accessory}
-	/>
+	<!-- Avatar cliquable → L'Armurerie -->
+	<button
+		type="button"
+		class="group block w-full rounded border-0 bg-transparent p-0 text-left"
+		onclick={() => (armoryOpen = true)}
+		aria-label="Personnaliser mon chevalier (L'Armurerie)"
+	>
+		<AvatarCard
+			level={gameState.level.level}
+			intoLevel={gameState.level.intoLevel}
+			needed={gameState.level.needed}
+			coins={gameState.user.coins}
+			prestige={gameState.level.prestige}
+			topStreak={gameState.globalStreak}
+			accessory={data.equippedCosmetics.accessory}
+			name={data.playerName}
+		/>
+		<div class="mt-1 text-center text-xs text-muted group-hover:text-ink">
+			✎ Personnaliser mon chevalier
+		</div>
+	</button>
 
 	<QuestList quests={dailyQuests} {onclaim} title="Quêtes du jour" />
 	<QuestList quests={weeklyQuests} {onclaim} title="Quêtes de la semaine" />
@@ -71,4 +87,20 @@
 			</a>
 		{/if}
 	</section>
+
+	<!-- Feature 1 — tâches ponctuelles (section séparée des habitudes récurrentes) -->
+	<TaskSection tasks={data.tasks} doneTasks={data.doneTasks} />
 </div>
+
+<Armurerie
+	open={armoryOpen}
+	onclose={() => (armoryOpen = false)}
+	level={gameState.level.level}
+	prestige={gameState.level.prestige}
+	topStreak={gameState.globalStreak}
+	accessory={data.equippedCosmetics.accessory}
+	playerName={data.playerName}
+	cosmetics={data.cosmetics}
+	ownedIds={data.ownedIds}
+	equippedIds={data.equippedIds}
+/>

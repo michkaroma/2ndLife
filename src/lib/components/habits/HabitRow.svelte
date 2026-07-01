@@ -16,6 +16,13 @@
 	const streak = $derived(entry?.streak ?? 0);
 	const done = $derived(status === 'done');
 
+	const isWeekly = $derived(habit.frequency_type === 'weekly');
+	const weekly = $derived(entry?.weekly ?? null);
+	const weeklyCount = $derived(weekly?.count ?? 0);
+	const weeklyQuota = $derived(weekly?.quota ?? Math.max(1, habit.weekly_quota));
+	const weeklyMet = $derived(weekly?.met ?? false);
+	const weeklyPct = $derived(Math.min(100, Math.round((weeklyCount / weeklyQuota) * 100)));
+
 	const statusLabel: Record<HabitStatus, string> = {
 		done: 'Fait',
 		skipped: 'Ignoré',
@@ -36,6 +43,8 @@
 				gameState.reconcile(r.delta, habit.id, 'done');
 				if (r.quests) gameState.setQuests(r.quests);
 				celebrateFromDelta(r.delta);
+				if (r.delta.weeklyQuotaJustMet)
+					celebration.toast('Objectif hebdo atteint ! 🎯', 'gold');
 			}
 		} catch (e) {
 			gameState.rollbackLog(habit.id, prev, prevXp);
@@ -59,7 +68,8 @@
 				gameState.today[habit.id] = {
 					habitId: habit.id,
 					streak: gameState.today[habit.id]?.streak ?? 0,
-					logStatus: s
+					logStatus: s,
+					weekly: gameState.today[habit.id]?.weekly ?? null
 				};
 				celebration.toast('Enregistré hors-ligne. ⏳', 'info');
 			} else {
@@ -83,7 +93,12 @@
 			const { delta, quests } = await deleteLog(habit.id, todayStr());
 			gameState.reconcile(delta, habit.id);
 			if (quests) gameState.setQuests(quests);
-			gameState.today[habit.id] = { habitId: habit.id, streak: delta.streakDays, logStatus: null };
+			gameState.today[habit.id] = {
+				habitId: habit.id,
+				streak: delta.streakDays,
+				logStatus: null,
+				weekly: delta.weekly ?? null
+			};
 		} catch (e) {
 			celebration.toast(e instanceof ApiFailure ? e.message : 'Annulation impossible.', 'danger');
 		} finally {
@@ -100,14 +115,36 @@
 	<div class="min-w-0 flex-1">
 		<div class="flex items-center gap-2">
 			<span class="truncate font-semibold">{habit.name}</span>
-			{#if streak > 0}<StreakFlame days={streak} size="sm" />{/if}
+			{#if isWeekly}
+				{#if weekly && weekly.streak > 0}
+					<span class="pill shrink-0 bg-flame/15 text-flame" title="Semaines consécutives réussies">
+						🔥 {weekly.streak} sem.
+					</span>
+				{/if}
+			{:else if streak > 0}
+				<StreakFlame days={streak} size="sm" />
+			{/if}
 		</div>
 		<div class="text-xs text-muted">
-			{habit.type === 'break' ? 'À arrêter' : 'À construire'}
-			{#if habit.category}· {habit.category}{/if}
-			· diff. {habit.difficulty}
-			{#if status && status !== 'done'}· <span class="text-ink">{statusLabel[status]}</span>{/if}
+			{#if isWeekly}
+				Hebdo · <span class="text-ink">{weeklyCount}/{weeklyQuota}</span> cette semaine
+				{#if weeklyMet}· <span class="text-health">rempli ✓</span>{/if}
+				· diff. {habit.difficulty}
+			{:else}
+				{habit.type === 'break' ? 'À arrêter' : 'À construire'}
+				{#if habit.category}· {habit.category}{/if}
+				· diff. {habit.difficulty}
+				{#if status && status !== 'done'}· <span class="text-ink">{statusLabel[status]}</span>{/if}
+			{/if}
 		</div>
+		{#if isWeekly}
+			<div class="track mt-1.5">
+				<div
+					class="track-fill {weeklyMet ? 'bg-health' : 'bg-primary'}"
+					style="width:{weeklyPct}%"
+				></div>
+			</div>
+		{/if}
 	</div>
 
 	{#if status}

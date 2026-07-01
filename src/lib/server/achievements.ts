@@ -12,7 +12,8 @@ import {
 	addCoins,
 	addXp,
 	seedAchievements,
-	localDate
+	localDate,
+	weekBounds
 } from './db';
 import { computeHabitStreaks, bestStreakFromDates, computeCleanStreak } from './streaks';
 import { levelFromXp } from '../config/progression';
@@ -35,17 +36,6 @@ export function seedAchievementsCatalog(): void {
 			reward_coins: achievementReward(a).coins
 		}))
 	);
-}
-
-function weekBounds(date: string): { start: string; end: string } {
-	const [y, m, d] = date.split('-').map(Number);
-	const dt = new Date(y, m - 1, d);
-	const dow = (dt.getDay() + 6) % 7;
-	const start = new Date(dt);
-	start.setDate(dt.getDate() - dow);
-	const end = new Date(start);
-	end.setDate(start.getDate() + 6);
-	return { start: localDate(start), end: localDate(end) };
 }
 
 function count(sql: string, ...args: unknown[]): number {

@@ -3,7 +3,7 @@
 import { goto } from '$app/navigation';
 import { enqueueLog } from './outbox';
 import { sync } from '$lib/stores/sync.svelte';
-import type { ProgressDelta, HabitLog, HabitStatus, Quest } from '$lib/types';
+import type { ProgressDelta, HabitLog, HabitStatus, Quest, OneTimeTask } from '$lib/types';
 
 export class ApiFailure extends Error {
 	code: string;
@@ -77,4 +77,16 @@ export async function claimQuest(
 	id: number
 ): Promise<{ delta: ProgressDelta; quest: Quest; quests: Quest[] }> {
 	return apiFetch(`/api/quests/${id}/claim`, { method: 'POST' });
+}
+
+// ---- Tâches ponctuelles (Feature 1) ----
+export async function completeTask(
+	id: number
+): Promise<{ task: OneTimeTask; delta: ProgressDelta }> {
+	return apiFetch(`/api/tasks/${id}/complete`, { method: 'POST' });
+}
+export async function reopenTask(
+	id: number
+): Promise<{ task: OneTimeTask; delta: ProgressDelta }> {
+	return apiFetch(`/api/tasks/${id}/reopen`, { method: 'POST' });
 }

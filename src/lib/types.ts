@@ -4,7 +4,9 @@
 
 // ---------- enums / unions ----------
 export type HabitType = 'build' | 'break';
+export type HabitFrequency = 'daily' | 'weekly';
 export type HabitStatus = 'done' | 'skipped' | 'relapsed';
+export type OneTimeTaskStatus = 'todo' | 'done';
 export type QuestScope = 'daily' | 'weekly';
 export type RewardKind = 'cosmetic' | 'real';
 export type LevelEventType = 'level_up' | 'prestige';
@@ -35,6 +37,7 @@ export interface UserStateRow {
 	equipped_skin_id: number | null;
 	equipped_accessory_id: number | null;
 	equipped_frame_id: number | null;
+	player_name: string | null;
 	created_at: string;
 }
 export interface Habit {
@@ -44,9 +47,24 @@ export interface Habit {
 	category: string | null;
 	difficulty: Difficulty;
 	icon: string | null;
+	frequency_type: HabitFrequency;
+	weekly_quota: number; // objectif X fois / semaine (utilisé si frequency_type='weekly')
 	archived: number;
 	sort_order: number;
 	created_at: string;
+}
+export interface OneTimeTask {
+	id: number;
+	title: string;
+	note: string | null;
+	due_date: string | null; // 'YYYY-MM-DD', purement indicatif
+	difficulty: Difficulty;
+	status: OneTimeTaskStatus;
+	xp_awarded: number;
+	coins_awarded: number;
+	sort_order: number;
+	created_at: string;
+	completed_at: string | null;
 }
 export interface HabitLog {
 	id: number;
@@ -161,8 +179,17 @@ export interface NewHabit {
 	category?: string | null;
 	difficulty?: Difficulty;
 	icon?: string | null;
+	frequency_type?: HabitFrequency;
+	weekly_quota?: number;
 }
 export type HabitPatch = Partial<NewHabit> & { sort_order?: number; archived?: boolean };
+export interface NewOneTimeTask {
+	title: string;
+	note?: string | null;
+	due_date?: string | null;
+	difficulty?: Difficulty;
+}
+export type OneTimeTaskPatch = Partial<NewOneTimeTask>;
 export interface NewReward {
 	name: string;
 	cost: number;
@@ -214,6 +241,13 @@ export interface StreakInfo {
 	current: number;
 	best: number;
 }
+/** État hebdomadaire d'un objectif « X fois / semaine » pour la semaine courante. */
+export interface WeeklyStatus {
+	count: number; // check-ins distincts cette semaine
+	quota: number; // objectif cible
+	met: boolean; // quota atteint
+	streak: number; // semaines consécutives où le quota a été atteint
+}
 export interface HabitWithStatus {
 	habit: Habit;
 	todayStatus: HabitStatus | null;
@@ -246,6 +280,8 @@ export interface ProgressDelta {
 	newLevel: number | null;
 	level: LevelInfo;
 	streakDays: number;
+	weekly?: WeeklyStatus | null; // présent pour les habitudes hebdomadaires
+	weeklyQuotaJustMet?: boolean; // vrai quand ce check-in vient d'atteindre le quota
 	unlockedAchievements: Achievement[];
 	completedQuests: Quest[];
 }
@@ -255,10 +291,14 @@ export interface LogResult {
 	levelBefore: number;
 	levelAfter: number;
 }
+export interface OneTimeTaskResult {
+	task: OneTimeTask;
+	delta: ProgressDelta;
+}
 
 export interface TodayView {
 	date: string;
-	habits: { habit: Habit; log: HabitLog | null; streak: number }[];
+	habits: { habit: Habit; log: HabitLog | null; streak: number; weekly?: WeeklyStatus | null }[];
 	globalStreak: number;
 }
 export interface SyncStateResponse {

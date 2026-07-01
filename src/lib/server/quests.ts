@@ -5,6 +5,7 @@ import {
 	getDb,
 	localDate,
 	isoWeek,
+	weekBounds,
 	listQuests,
 	upsertQuest,
 	setQuestProgress,
@@ -13,17 +14,6 @@ import {
 import { computeHabitStreaks } from './streaks';
 import { generateDailyQuests, generateWeeklyQuests } from '../config/quests';
 import type { Quest } from '../types';
-
-function weekBounds(date: string): { start: string; end: string } {
-	const [y, m, d] = date.split('-').map(Number);
-	const dt = new Date(y, m - 1, d);
-	const dow = (dt.getDay() + 6) % 7; // Lundi=0
-	const start = new Date(dt);
-	start.setDate(dt.getDate() - dow);
-	const end = new Date(start);
-	end.setDate(start.getDate() + 6);
-	return { start: localDate(start), end: localDate(end) };
-}
 
 /** Génère (si absentes) les quêtes du jour et de la semaine pour ce niveau. */
 export function ensureQuests(level: number, date: string = localDate()): void {
@@ -154,6 +144,7 @@ function computeAggregates(date: string): Aggregates {
 	let maxCurrentStreak = 0;
 	for (const h of listHabits()) {
 		if (h.type !== 'build') continue;
+		if (h.frequency_type === 'weekly') continue; // série quotidienne non pertinente pour un quota hebdo
 		const s = computeHabitStreaks(h.id, date).current;
 		if (s > maxCurrentStreak) maxCurrentStreak = s;
 	}

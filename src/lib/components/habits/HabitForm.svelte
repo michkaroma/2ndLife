@@ -1,5 +1,6 @@
 <script lang="ts">
-	import type { Habit, HabitType, Difficulty, NewHabit } from '$lib/types';
+	import type { Habit, HabitType, HabitFrequency, Difficulty, NewHabit } from '$lib/types';
+	import SegmentedControl from '$lib/components/ui/SegmentedControl.svelte';
 
 	let {
 		habit = undefined,
@@ -22,9 +23,18 @@
 	let category = $state(initial?.category ?? '');
 	let difficulty = $state<Difficulty>(initial?.difficulty ?? 1);
 	let icon = $state(initial?.icon ?? '');
+	let frequency = $state<HabitFrequency>(initial?.frequency_type ?? 'daily');
+	let weeklyQuota = $state(initial?.weekly_quota ?? 2);
 
 	const DIFF_LABELS = ['Facile', 'Moyenne', 'Difficile'];
 	const ICONS = ['💧', '🏃', '📚', '🧘', '🥗', '😴', '🚭', '🍷', '🍩', '📵', '🎯', '🪥'];
+
+	// La fréquence ne s'applique qu'aux habitudes « à construire ».
+	const effectiveFrequency = $derived<HabitFrequency>(type === 'build' ? frequency : 'daily');
+
+	function setQuota(n: number) {
+		weeklyQuota = Math.min(7, Math.max(1, n));
+	}
 
 	function submit(e: Event) {
 		e.preventDefault();
@@ -34,7 +44,9 @@
 			type,
 			category: category.trim() || null,
 			difficulty,
-			icon: icon || null
+			icon: icon || null,
+			frequency_type: effectiveFrequency,
+			weekly_quota: effectiveFrequency === 'weekly' ? weeklyQuota : 1
 		});
 	}
 </script>
@@ -79,6 +91,44 @@
 			</button>
 		</div>
 	</div>
+
+	{#if type === 'build'}
+		<div>
+			<span class="mb-1 block text-sm text-muted">Fréquence</span>
+			<SegmentedControl
+				options={[
+					{ value: 'daily', label: 'Chaque jour' },
+					{ value: 'weekly', label: 'X / semaine' }
+				]}
+				value={frequency}
+				onchange={(v) => (frequency = v as HabitFrequency)}
+				ariaLabel="Fréquence de l'habitude"
+			/>
+			{#if frequency === 'weekly'}
+				<div class="mt-2 flex items-center justify-between rounded-xl border border-border bg-surface2 px-3 py-2">
+					<span class="text-sm text-muted">Objectif par semaine</span>
+					<div class="flex items-center gap-3">
+						<button
+							type="button"
+							class="grid h-8 w-8 place-items-center rounded-lg border border-border text-lg disabled:opacity-40"
+							onclick={() => setQuota(weeklyQuota - 1)}
+							disabled={weeklyQuota <= 1}
+							aria-label="Diminuer le quota"
+						>−</button>
+						<span class="min-w-[3ch] text-center font-display text-base">{weeklyQuota}×</span>
+						<button
+							type="button"
+							class="grid h-8 w-8 place-items-center rounded-lg border border-border text-lg disabled:opacity-40"
+							onclick={() => setQuota(weeklyQuota + 1)}
+							disabled={weeklyQuota >= 7}
+							aria-label="Augmenter le quota"
+						>+</button>
+					</div>
+				</div>
+				<p class="mt-1 text-xs text-muted">À valider {weeklyQuota} fois dans la semaine, n'importe quels jours.</p>
+			{/if}
+		</div>
+	{/if}
 
 	<div>
 		<label class="mb-1 block text-sm text-muted" for="hf-cat">Catégorie (optionnel)</label>

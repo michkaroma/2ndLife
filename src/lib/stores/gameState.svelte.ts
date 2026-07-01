@@ -10,13 +10,15 @@ import type {
 	Quest,
 	HabitStatus,
 	SyncStateResponse,
-	Habit
+	Habit,
+	WeeklyStatus
 } from '$lib/types';
 
 interface TodayHabit {
 	habitId: number;
 	streak: number;
 	logStatus: HabitStatus | null;
+	weekly?: WeeklyStatus | null; // habitudes hebdomadaires uniquement
 }
 interface Shape {
 	user: UserStateRow;
@@ -37,6 +39,7 @@ const EMPTY_USER: UserStateRow = {
 	equipped_skin_id: null,
 	equipped_accessory_id: null,
 	equipped_frame_id: null,
+	player_name: null,
 	created_at: ''
 };
 
@@ -86,15 +89,42 @@ export const gameState = {
 		gs.today = Object.fromEntries(
 			payload.today.habits.map((h) => [
 				h.habit.id,
-				{ habitId: h.habit.id, streak: h.streak, logStatus: h.log?.status ?? null }
+				{
+					habitId: h.habit.id,
+					streak: h.streak,
+					logStatus: h.log?.status ?? null,
+					weekly: h.weekly ?? null
+				}
 			])
 		);
 	},
 
 	/** OPTIMISTE : appelé dès le tap, avant la réponse réseau. */
-	optimisticLog(habit: Pick<Habit, 'id' | 'difficulty' | 'type'>) {
+	optimisticLog(habit: Pick<Habit, 'id' | 'difficulty' | 'type' | 'frequency_type' | 'weekly_quota'>) {
 		const cur = gs.today[habit.id];
 		if (cur && cur.logStatus === 'done') return;
+
+		// Objectif hebdomadaire : petit gain par check-in (+ bonus optimiste si le quota est atteint).
+		if (habit.frequency_type === 'weekly') {
+			const w = cur?.weekly;
+			const quota = w?.quota ?? Math.max(1, habit.weekly_quota ?? 1);
+			const nextCount = (w?.count ?? 0) + 1;
+			const met = nextCount >= quota;
+			let xp = PROGRESSION.XP_WEEKLY_CHECKIN * habit.difficulty;
+			if (met && !w?.met) xp += PROGRESSION.XP_WEEKLY_QUOTA_BONUS * habit.difficulty;
+			gs.user = { ...gs.user, total_xp: gs.user.total_xp + xp };
+			gs.today = {
+				...gs.today,
+				[habit.id]: {
+					habitId: habit.id,
+					streak: w?.streak ?? 0,
+					logStatus: 'done',
+					weekly: { count: nextCount, quota, met, streak: w?.streak ?? 0 }
+				}
+			};
+			return;
+		}
+
 		const guessStreak = (cur?.streak ?? 0) + 1;
 		const base =
 			(habit.type === 'break' ? PROGRESSION.XP_BREAK_HABIT_DAY : PROGRESSION.XP_PER_HABIT) *
@@ -105,7 +135,10 @@ export const gameState = {
 		);
 		const xp = Math.round(base * (1 + bonus));
 		gs.user = { ...gs.user, total_xp: gs.user.total_xp + xp };
-		gs.today = { ...gs.today, [habit.id]: { habitId: habit.id, streak: guessStreak, logStatus: 'done' } };
+		gs.today = {
+			...gs.today,
+			[habit.id]: { habitId: habit.id, streak: guessStreak, logStatus: 'done', weekly: null }
+		};
 	},
 
 	/** RÉCONCILIE : remplace l'optimisme par le delta autoritaire du serveur. */
@@ -120,7 +153,12 @@ export const gameState = {
 		if (habitId != null) {
 			gs.today = {
 				...gs.today,
-				[habitId]: { habitId, streak: delta.streakDays, logStatus: status }
+				[habitId]: {
+					habitId,
+					streak: delta.streakDays,
+					logStatus: status,
+					weekly: delta.weekly ?? null
+				}
 			};
 		}
 		if (delta.completedQuests.length) {

@@ -26,7 +26,18 @@ export const PROGRESSION = {
 	PRESTIGE_LEVEL: 50, // niveau à partir duquel le prestige est possible
 
 	// --- Tolérance de validation hors-ligne (jours en arrière) ---
-	MAX_BACKFILL_DAYS: 2
+	MAX_BACKFILL_DAYS: 2,
+
+	// --- Tâches ponctuelles (Feature 1) ---
+	// XP créditée UNE seule fois selon le palier de difficulté (index 0 = diff. 1).
+	// Pas de série : montants un peu plus généreux qu'une habitude quotidienne.
+	ONE_TIME_TASK_XP: [20, 45, 80],
+
+	// --- Objectifs hebdomadaires (Feature 3) ---
+	XP_WEEKLY_CHECKIN: 15, // petit gain par check-in (× difficulté), sans bonus de série quotidienne
+	XP_WEEKLY_QUOTA_BONUS: 40, // bonus à l'atteinte du quota (× difficulté), une seule fois / semaine
+	WEEKLY_STREAK_BONUS_PER_WEEK: 0.05, // +5 % du bonus de quota par semaine consécutive réussie
+	WEEKLY_STREAK_BONUS_CAP: 0.5 // bonus de série hebdo plafonné à +50 %
 } as const;
 
 /** XP requis pour passer du niveau `level` au niveau suivant. */
@@ -61,6 +72,21 @@ export function xpWithStreak(base: number, streakDays: number): number {
 	const bonus = Math.min(
 		streakDays * PROGRESSION.STREAK_BONUS_PER_DAY,
 		PROGRESSION.STREAK_BONUS_CAP
+	);
+	return Math.round(base * (1 + bonus));
+}
+
+/** XP d'une tâche ponctuelle selon sa difficulté (1..3). */
+export function oneTimeTaskXp(difficulty: number): number {
+	const i = Math.min(Math.max(Math.round(difficulty), 1), 3) - 1;
+	return PROGRESSION.ONE_TIME_TASK_XP[i];
+}
+
+/** Bonus d'XP de quota hebdo, série de semaines consécutives incluse. */
+export function xpWithWeeklyStreak(base: number, weeksStreak: number): number {
+	const bonus = Math.min(
+		weeksStreak * PROGRESSION.WEEKLY_STREAK_BONUS_PER_WEEK,
+		PROGRESSION.WEEKLY_STREAK_BONUS_CAP
 	);
 	return Math.round(base * (1 + bonus));
 }

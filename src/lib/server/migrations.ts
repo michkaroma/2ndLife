@@ -7,6 +7,14 @@ export interface Migration {
 	up: (db: Database) => void;
 }
 
+/** Ajoute une colonne seulement si elle n'existe pas déjà (ALTER idempotent). */
+function addColumnIfMissing(db: Database, table: string, column: string, ddl: string): void {
+	const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+	if (!cols.some((c) => c.name === column)) {
+		db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+	}
+}
+
 // Append-only. Never edit or renumber a shipped migration.
 export const MIGRATIONS: Migration[] = [
 	{
@@ -193,8 +201,58 @@ export const MIGRATIONS: Migration[] = [
         INSERT OR IGNORE INTO user_state (id) VALUES (1);
       `);
 		}
+	},
+	{
+		version: 2,
+		name: 'tasks_weekly_goals_player_name',
+		up: (db) => {
+			// --- Feature 3 : objectifs hebdomadaires (extension du modèle d'habitudes) ---
+			// Les habitudes existantes basculent en 'daily' (aucune régression).
+			addColumnIfMissing(
+				db,
+				'habits',
+				'frequency_type',
+				`frequency_type TEXT NOT NULL DEFAULT 'daily'`
+			);
+			addColumnIfMissing(db, 'habits', 'weekly_quota', `weekly_quota INTEGER NOT NULL DEFAULT 1`);
+
+			// --- Feature 2 : nom de personnage personnalisable ---
+			addColumnIfMissing(db, 'user_state', 'player_name', `player_name TEXT`);
+
+			db.exec(/* sql */ `
+        -- ===== Feature 1 : tâches ponctuelles (à faire une seule fois) =====
+        CREATE TABLE IF NOT EXISTS one_time_tasks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          note TEXT,
+          due_date TEXT,              -- 'YYYY-MM-DD', purement indicatif (jamais punitif)
+          difficulty INTEGER NOT NULL DEFAULT 1 CHECK (difficulty BETWEEN 1 AND 3),
+          status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo','done')),
+          xp_awarded INTEGER NOT NULL DEFAULT 0,
+          coins_awarded INTEGER NOT NULL DEFAULT 0,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          completed_at TEXT
+        );
+
+        -- ===== Feature 3 : registre des bonus de quota hebdo (idempotent, 1 ligne / habitude / semaine) =====
+        -- La colonne quota fige l'objectif au moment de l'octroi : on ne reprend le
+        -- bonus que si les check-ins repassent sous CE seuil (un-tap), jamais parce
+        -- que le quota a été relevé après coup (design non-punitif).
+        CREATE TABLE IF NOT EXISTS weekly_goal_awards (
+          habit_id INTEGER NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+          week TEXT NOT NULL,         -- isoWeek 'YYYY-Www'
+          quota INTEGER NOT NULL DEFAULT 1,
+          bonus_xp INTEGER NOT NULL DEFAULT 0,
+          bonus_coins INTEGER NOT NULL DEFAULT 0,
+          awarded_at TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (habit_id, week)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_one_time_tasks_status ON one_time_tasks(status, sort_order);
+      `);
+		}
 	}
-	// Future migrations: { version: 2, name: '...', up: (db) => db.exec('ALTER TABLE ...') }
 ];
 
 export function runMigrations(db: Database): void {

@@ -21,24 +21,27 @@ const seed = db.transaction(() => {
 	db.exec(`
     DELETE FROM daily_checkins;
     DELETE FROM trigger_journal;
+    DELETE FROM weekly_goal_awards;
     DELETE FROM habit_logs;
     DELETE FROM quests;
     DELETE FROM owned_cosmetics;
     DELETE FROM rewards;
     DELETE FROM addiction_targets;
+    DELETE FROM one_time_tasks;
     DELETE FROM habits;
     DELETE FROM level_events;
     UPDATE achievements SET unlocked_at = NULL;
     DELETE FROM sqlite_sequence WHERE name IN
-      ('habits','habit_logs','quests','rewards','addiction_targets','trigger_journal','owned_cosmetics','level_events','daily_checkins');
+      ('habits','habit_logs','quests','rewards','addiction_targets','trigger_journal','owned_cosmetics','level_events','daily_checkins','one_time_tasks');
   `);
 
-	// 1. user_state (≈ niveau 10)
+	// 1. user_state (≈ niveau 10) + nom de personnage de démo
 	db.prepare(
 		`UPDATE user_state SET total_xp=12000, coins=640, prestige=0, freezes=2,
        last_active=?, last_freeze_grant=NULL,
        equipped_theme_id=NULL, equipped_skin_id=NULL,
-       equipped_accessory_id=NULL, equipped_frame_id=NULL
+       equipped_accessory_id=NULL, equipped_frame_id=NULL,
+       player_name='Sieur Galahad'
      WHERE id=1`
 	).run(today);
 
@@ -57,6 +60,12 @@ const seed = db.transaction(() => {
 	];
 	habits.forEach((h) => insHabit.run(h));
 
+	// Habitude à quota hebdomadaire (Feature 3) : « X fois / semaine ».
+	db.prepare(
+		`INSERT INTO habits (id, name, type, category, difficulty, icon, frequency_type, weekly_quota, archived, sort_order, created_at)
+     VALUES (?,?,?,?,?,?,?,?,0,?,?)`
+	).run(7, 'Appeler un proche', 'build', 'Social', 1, '📞', 'weekly', 2, 7, daysAgo(28));
+
 	// 3. habit_logs (séries + gaps)
 	const insLog = db.prepare(
 		`INSERT OR IGNORE INTO habit_logs (habit_id, date, status, note) VALUES (?, ?, ?, ?)`
@@ -74,6 +83,10 @@ const seed = db.transaction(() => {
 	}
 	const skip6 = new Set([29, 27, 24, 23, 19, 16, 12, 9, 6]);
 	for (let n = 29; n >= 0; n--) if (!skip6.has(n)) insLog.run(6, daysAgo(n), 'done', null);
+
+	// Habitude hebdo « Appeler un proche » : ~2 check-ins/semaine sur les 3 dernières
+	// semaines (série hebdo) + 1 cette semaine (en cours → 1/2). Réparti ~tous les 3-4 j.
+	for (const n of [1, 8, 11, 15, 18, 22, 25]) insLog.run(7, daysAgo(n), 'done', null);
 
 	// 4. addiction_targets (boss) — substance + comportementaux
 	const insTarget = db.prepare(`
@@ -111,6 +124,16 @@ const seed = db.transaction(() => {
 	insTrig.run(2, `${daysAgo(11)} 22:30:00`, 'Ennui le soir', 8, "J'ai cédé, mais je note et je repars demain.", 1);
 	insTrig.run(2, `${daysAgo(2)} 16:00:00`, 'Fatigue après-midi', 5, 'Envie de sucré, remplacée par un fruit.', 0);
 	insTrig.run(3, `${daysAgo(3)} 20:00:00`, 'Ennui du soir', 6, "Scroll automatique, j'ai posé le téléphone.", 0);
+
+	// 6. Tâches ponctuelles (Feature 1) : 3 à faire + 1 déjà terminée.
+	const insTask = db.prepare(
+		`INSERT INTO one_time_tasks (title, note, due_date, difficulty, status, xp_awarded, coins_awarded, sort_order, completed_at)
+     VALUES (?,?,?,?,?,?,?,?,?)`
+	);
+	insTask.run('Prendre RDV chez le dentiste', null, daysAgo(-5), 1, 'todo', 0, 0, 1, null);
+	insTask.run('Trier les papiers administratifs', 'Avant la fin du mois.', null, 2, 'todo', 0, 0, 2, null);
+	insTask.run("Réserver les vacances d'été", null, daysAgo(-20), 3, 'todo', 0, 0, 3, null);
+	insTask.run('Monter la nouvelle étagère', null, null, 2, 'done', 45, 9, 4, `${daysAgo(2)} 14:30:00`);
 });
 
 seed();

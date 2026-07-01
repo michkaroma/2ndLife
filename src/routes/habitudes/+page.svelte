@@ -89,6 +89,7 @@
 					<div class="truncate font-semibold">{h.name}</div>
 					<div class="text-xs text-muted">
 						{h.type === 'break' ? 'À arrêter' : 'À construire'}
+						{#if h.frequency_type === 'weekly'}· {h.weekly_quota}×/sem.{/if}
 						{#if h.category}· {h.category}{/if} · diff. {h.difficulty}
 					</div>
 				</div>

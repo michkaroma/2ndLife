@@ -1,6 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 import { listHabits, getHabitLog, getUserState, getReward, localDate } from '$lib/server/db';
-import { computeHabitStreaks } from '$lib/server/streaks';
+import { computeHabitStreaks, weeklyStatus } from '$lib/server/streaks';
 import { levelInfoFromState } from '$lib/server/progression';
 import { ensureQuests, recomputeQuestProgress } from '$lib/server/quests';
 import type { SyncStateResponse, UserStateRow, EquippedCosmetics } from '$lib/types';
@@ -17,6 +17,7 @@ const EMPTY_USER: UserStateRow = {
 	equipped_skin_id: null,
 	equipped_accessory_id: null,
 	equipped_frame_id: null,
+	player_name: null,
 	created_at: ''
 };
 
@@ -36,11 +37,14 @@ export const load: LayoutServerLoad = ({ locals }) => {
 	}
 
 	const habits = listHabits();
-	const today = habits.map((h) => ({
-		habit: h,
-		log: getHabitLog(h.id, date),
-		streak: computeHabitStreaks(h.id, date).current
-	}));
+	const today = habits.map((h) => {
+		const log = getHabitLog(h.id, date);
+		if (h.frequency_type === 'weekly') {
+			return { habit: h, log, streak: 0, weekly: weeklyStatus(h.id, h.weekly_quota, date) };
+		}
+		return { habit: h, log, streak: computeHabitStreaks(h.id, date).current, weekly: null };
+	});
+	// La série globale ne compte que les habitudes quotidiennes (les hebdo ont leur propre série).
 	const globalStreak = today.reduce((m, h) => Math.max(m, h.streak), 0);
 	const user = getUserState();
 	const level = levelInfoFromState(user);

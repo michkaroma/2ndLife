@@ -33,7 +33,11 @@ import type {
 	NewAddictionTarget,
 	NewTriggerEntry,
 	WebPushKeys,
-	CosmeticSlot
+	CosmeticSlot,
+	OneTimeTask,
+	NewOneTimeTask,
+	OneTimeTaskPatch,
+	OneTimeTaskStatus
 } from '../types';
 
 // =========================================================================
@@ -122,6 +126,22 @@ export function isoWeek(date: string = localDate()): string {
 	return `${dt.getUTCFullYear()}-W${String(week).padStart(2, '00')}`;
 }
 
+/**
+ * Bornes (lundi → dimanche) de la semaine LOCALE contenant `date`, en 'YYYY-MM-DD'.
+ * Helper de semaine centralisé : réutilisé par les quêtes, les succès et les
+ * objectifs hebdomadaires (même base de fuseau que le reste de l'app).
+ */
+export function weekBounds(date: string = localDate()): { start: string; end: string } {
+	const [y, m, d] = date.split('-').map(Number);
+	const dt = new Date(y, m - 1, d);
+	const dow = (dt.getDay() + 6) % 7; // Lundi = 0
+	const start = new Date(dt);
+	start.setDate(dt.getDate() - dow);
+	const end = new Date(start);
+	end.setDate(start.getDate() + 6);
+	return { start: localDate(start), end: localDate(end) };
+}
+
 // =========================================================================
 //  Settings
 // =========================================================================
@@ -191,6 +211,10 @@ export function grantWeeklyFreezeIfDue(week: string): boolean {
 export function setLastActive(date: string): void {
 	getDb().prepare('UPDATE user_state SET last_active = ? WHERE id = 1').run(date);
 }
+/** Nom de personnage personnalisé (null = revient au nom de stade par défaut). */
+export function setPlayerName(name: string | null): void {
+	getDb().prepare('UPDATE user_state SET player_name = ? WHERE id = 1').run(name);
+}
 
 const SLOT_TO_COLUMN: Record<CosmeticSlot, string> = {
 	theme:       'equipped_theme_id',
@@ -256,8 +280,8 @@ export function createHabit(input: NewHabit): Habit {
 		0;
 	const info = db
 		.prepare(
-			`INSERT INTO habits (name, type, category, difficulty, icon, sort_order)
-       VALUES (@name, @type, @category, @difficulty, @icon, @sort_order)`
+			`INSERT INTO habits (name, type, category, difficulty, icon, frequency_type, weekly_quota, sort_order)
+       VALUES (@name, @type, @category, @difficulty, @icon, @frequency_type, @weekly_quota, @sort_order)`
 		)
 		.run({
 			name: input.name,
@@ -265,6 +289,8 @@ export function createHabit(input: NewHabit): Habit {
 			category: input.category ?? null,
 			difficulty: input.difficulty ?? 1,
 			icon: input.icon ?? null,
+			frequency_type: input.frequency_type ?? 'daily',
+			weekly_quota: Math.max(1, input.weekly_quota ?? 1),
 			sort_order: maxOrder + 1
 		});
 	return getHabit(Number(info.lastInsertRowid))!;
@@ -281,6 +307,8 @@ export function updateHabit(id: number, patch: HabitPatch): Habit | null {
 		category: patch.category !== undefined ? patch.category : h.category,
 		difficulty: patch.difficulty ?? h.difficulty,
 		icon: patch.icon !== undefined ? patch.icon : h.icon,
+		frequency_type: patch.frequency_type ?? h.frequency_type,
+		weekly_quota: patch.weekly_quota !== undefined ? Math.max(1, patch.weekly_quota) : h.weekly_quota,
 		sort_order: patch.sort_order ?? h.sort_order,
 		archived: patch.archived !== undefined ? (patch.archived ? 1 : 0) : h.archived,
 		id
@@ -288,7 +316,8 @@ export function updateHabit(id: number, patch: HabitPatch): Habit | null {
 	getDb()
 		.prepare(
 			`UPDATE habits SET name=@name, type=@type, category=@category, difficulty=@difficulty,
-         icon=@icon, sort_order=@sort_order, archived=@archived WHERE id=@id`
+         icon=@icon, frequency_type=@frequency_type, weekly_quota=@weekly_quota,
+         sort_order=@sort_order, archived=@archived WHERE id=@id`
 		)
 		.run(merged);
 	return getHabit(id);
@@ -368,6 +397,50 @@ export function countLogsForDate(date: string, status: HabitStatus): number {
 			.prepare('SELECT COUNT(*) AS c FROM habit_logs WHERE date = ? AND status = ?')
 			.get(date, status) as { c: number }
 	).c;
+}
+/** Nombre de jours 'done' d'une habitude dans un intervalle inclusif (objectifs hebdo). */
+export function countDoneInRange(habitId: number, start: string, end: string): number {
+	return (
+		getDb()
+			.prepare(
+				`SELECT COUNT(*) AS c FROM habit_logs
+         WHERE habit_id = ? AND status = 'done' AND date BETWEEN ? AND ?`
+			)
+			.get(habitId, start, end) as { c: number }
+	).c;
+}
+
+// =========================================================================
+//  Objectifs hebdomadaires — registre des bonus de quota (idempotent)
+// =========================================================================
+export function getWeeklyAward(
+	habitId: number,
+	week: string
+): { quota: number; bonus_xp: number; bonus_coins: number } | null {
+	return (
+		(getDb()
+			.prepare(
+				'SELECT quota, bonus_xp, bonus_coins FROM weekly_goal_awards WHERE habit_id = ? AND week = ?'
+			)
+			.get(habitId, week) as { quota: number; bonus_xp: number; bonus_coins: number }) ?? null
+	);
+}
+export function insertWeeklyAward(
+	habitId: number,
+	week: string,
+	quota: number,
+	bonusXp: number,
+	bonusCoins: number
+): void {
+	getDb()
+		.prepare(
+			`INSERT OR IGNORE INTO weekly_goal_awards (habit_id, week, quota, bonus_xp, bonus_coins)
+       VALUES (?, ?, ?, ?, ?)`
+		)
+		.run(habitId, week, quota, bonusXp, bonusCoins);
+}
+export function deleteWeeklyAward(habitId: number, week: string): void {
+	getDb().prepare('DELETE FROM weekly_goal_awards WHERE habit_id = ? AND week = ?').run(habitId, week);
 }
 
 // =========================================================================
@@ -769,4 +842,82 @@ export function touchPushSubscription(endpoint: string): void {
 	getDb()
 		.prepare(`UPDATE push_subscriptions SET last_seen = datetime('now') WHERE endpoint = ?`)
 		.run(endpoint);
+}
+
+// =========================================================================
+//  One-time tasks (tâches ponctuelles — Feature 1)
+// =========================================================================
+export function createOneTimeTask(input: NewOneTimeTask): OneTimeTask {
+	const db = getDb();
+	const maxOrder =
+		(db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM one_time_tasks').get() as { m: number })
+			.m ?? 0;
+	const info = db
+		.prepare(
+			`INSERT INTO one_time_tasks (title, note, due_date, difficulty, sort_order)
+       VALUES (@title, @note, @due_date, @difficulty, @sort_order)`
+		)
+		.run({
+			title: input.title,
+			note: input.note ?? null,
+			due_date: input.due_date ?? null,
+			difficulty: input.difficulty ?? 1,
+			sort_order: maxOrder + 1
+		});
+	return getOneTimeTask(Number(info.lastInsertRowid))!;
+}
+export function getOneTimeTask(id: number): OneTimeTask | null {
+	return (getDb().prepare('SELECT * FROM one_time_tasks WHERE id = ?').get(id) as OneTimeTask) ?? null;
+}
+export function updateOneTimeTask(id: number, patch: OneTimeTaskPatch): OneTimeTask | null {
+	const t = getOneTimeTask(id);
+	if (!t) return null;
+	const merged = {
+		title: patch.title ?? t.title,
+		note: patch.note !== undefined ? patch.note : t.note,
+		due_date: patch.due_date !== undefined ? patch.due_date : t.due_date,
+		difficulty: patch.difficulty ?? t.difficulty,
+		id
+	};
+	getDb()
+		.prepare(
+			`UPDATE one_time_tasks SET title=@title, note=@note, due_date=@due_date, difficulty=@difficulty WHERE id=@id`
+		)
+		.run(merged);
+	return getOneTimeTask(id);
+}
+export function deleteOneTimeTask(id: number): void {
+	getDb().prepare('DELETE FROM one_time_tasks WHERE id = ?').run(id);
+}
+export function listOneTimeTasks(opts?: { status?: OneTimeTaskStatus }): OneTimeTask[] {
+	const db = getDb();
+	if (opts?.status === 'done') {
+		return db
+			.prepare(`SELECT * FROM one_time_tasks WHERE status = 'done' ORDER BY completed_at DESC, id DESC`)
+			.all() as OneTimeTask[];
+	}
+	if (opts?.status === 'todo') {
+		return db
+			.prepare(`SELECT * FROM one_time_tasks WHERE status = 'todo' ORDER BY sort_order ASC, id ASC`)
+			.all() as OneTimeTask[];
+	}
+	return db.prepare('SELECT * FROM one_time_tasks ORDER BY sort_order ASC, id ASC').all() as OneTimeTask[];
+}
+/** Marque une tâche comme faite et fige les récompenses créditées (réversible). */
+export function markOneTimeTaskDone(id: number, xp: number, coins: number): void {
+	getDb()
+		.prepare(
+			`UPDATE one_time_tasks SET status='done', xp_awarded=?, coins_awarded=?, completed_at=datetime('now')
+       WHERE id=? AND status='todo'`
+		)
+		.run(xp, coins, id);
+}
+/** Ré-ouvre une tâche (annulation) : remet à 'todo' et oublie les récompenses. */
+export function markOneTimeTaskTodo(id: number): void {
+	getDb()
+		.prepare(
+			`UPDATE one_time_tasks SET status='todo', xp_awarded=0, coins_awarded=0, completed_at=NULL
+       WHERE id=? AND status='done'`
+		)
+		.run(id);
 }
